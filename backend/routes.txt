@@ -1,0 +1,38 @@
+Auth
+POST /auth/signup
+POST /auth/login
+POST /auth/logout
+GET /users/me
+
+Folders
+POST /folders
+GET /folders/:id
+PUT /folders/:id (rename/move)
+DELETE /folders/:id
+GET /folders/:id/children
+
+Files
+POST /files (upload)
+GET /files/:id/download
+GET /files/:id (metadata)
+PUT /files/:id (rename/move)
+DELETE /files/:id
+
+Recycle Bin
+GET /recyclebin
+POST /recyclebin/:id/restore
+DELETE /recyclebin/:id/permanent
+
+Sharing
+POST /files/:id/permissions
+GET /files/:id/permissions
+DELETE /files/:id/permissions/:userId
+
+Search
+GET /search?q=...
+GET /files/recent
+GET /files/starred (optional)
+POST /files/:id/star / DELETE /files/:id/star
+
+Activity
+GET /activity
