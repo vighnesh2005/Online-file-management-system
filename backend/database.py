@@ -40,9 +40,11 @@ queries = [
         file_id INTEGER PRIMARY KEY AUTOINCREMENT,
         file_name VARCHAR(100) NOT NULL,
         parent_id INTEGER,
+        file_path VARCHAR(100),
         user_id INTEGER,
         created_at DATE,
         updated_at DATE,
+        file_size INTEGER,
         status VARCHAR(20) CHECK(status IN ('deleted', 'not_deleted')),
         FOREIGN KEY (parent_id) REFERENCES folders(folder_id),
         FOREIGN KEY (user_id) REFERENCES users(user_id)

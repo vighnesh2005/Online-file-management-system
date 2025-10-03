@@ -16,7 +16,6 @@ POST /files (upload)
 GET /files/:id/download
 GET /files/:id (metadata)
 PUT /files/:id (rename/move)
-DELETE /files/:id
 
 Recycle Bin
 GET /recyclebin

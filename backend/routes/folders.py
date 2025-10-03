@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends,HTTPException,Form
 from utils import get_db
 from verify_token import get_current_user
-from sqlalchemy import text
+from sqlalchemy import text,bindparam
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -129,111 +129,180 @@ def folder_rename(db: Session = Depends(get_db), current_user: dict = Depends(ge
 
     return {"message": "Folder renamed successfully", "folder_id": folder_id, "folder_name": folder_name}
 
-#moving a folder
-@router.put('/folder_move')
-def folder_move(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
-                  folder_id: int = Form(...), parent_id: int = Form(...)):
+@router.put('/bulk_move')
+def folder_move(
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(get_current_user),
+    folder_ids: list[int] = Form(None), 
+    parent_id: int = Form(...), 
+    file_ids: list[int] = Form(None)
+):
     user_id = current_user["user_id"]
 
-    #check if the folder belongs to the user or not
-    result = db.execute(text(
-        '''
-            SELECT * FROM folders WHERE user_id = :user_id AND folder_id = :folder_id
-        '''
-    ),{
-        "folder_id": folder_id,
-        "user_id": user_id
-    }).fetchone()
+    # check if the folder belongs to the user or not
+    if folder_ids is not None:
+        result = db.execute(
+            text('''
+                SELECT * FROM folders WHERE folder_id IN :folder_ids AND user_id = :user_id
+            ''').bindparams(bindparam("folder_ids", expanding=True)),
+            {"folder_ids": folder_ids, "user_id": user_id}
+        ).fetchall()
 
-    if not result :
-        raise HTTPException(status_code=400, detail="Folder not found")
+        if len(result) != len(folder_ids):
+            raise HTTPException(status_code=400, detail="Folder not found")
     
-    #check if the folder is moved to its descendant
-    descendants = db.execute(text(
-        '''
-            WITH RECURSIVE descendants AS(
-                SELECT folder_id
-                FROM folders
-                WHERE folder_id = :folder_id
-                UNION ALL
-                SELECT f.folder_id
-                FROM folders f
-                INNER JOIN descendants d ON f.parent_id = d.folder_id
-            )
-            SELECT folder_id FROM descendants;
-        '''
-    ),{
-        "folder_id": folder_id
-    }).fetchall()
+    # check if the file belongs to the user or not
+    if file_ids is not None:
+        result = db.execute(
+            text('''
+                SELECT * FROM files WHERE file_id IN :file_ids AND user_id = :user_id
+            ''').bindparams(bindparam("file_ids", expanding=True)),
+            {"file_ids": file_ids, "user_id": user_id}
+        ).fetchall()
 
-    descendant_ids = [folder[0] for folder in descendants]
-    if parent_id in descendant_ids:
-        raise HTTPException(status_code=400, detail="Cannot move folder to its descendant")
+        if len(result) != len(file_ids):
+            raise HTTPException(status_code=400, detail="File not found")
 
-    #updating the position of the folder
-    result = db.execute(text(
-        '''
-        UPDATE folders SET parent_id = :parent_id, updated_at = :updated_at
-        WHERE folder_id = :folder_id
-        RETURNING folder_id,folder_name,parent_id,user_id,created_at,updated_at
-    '''
-    ),{
-        "folder_id": folder_id,
-        "parent_id": parent_id,
-        "updated_at": datetime.now()
-    }).fetchone()
+    updated_folders = []
+    updated_files = []
+
+    if folder_ids is not None:
+    # check if the folder is moved to its descendant
+        descendants = db.execute(
+            text('''
+                WITH RECURSIVE descendants AS (
+                    SELECT folder_id
+                    FROM folders
+                    WHERE parent_id IN :folder_ids AND user_id = :user_id
+                    UNION ALL
+                    SELECT f.folder_id
+                    FROM folders f
+                    JOIN descendants d ON f.parent_id = d.folder_id
+                    WHERE f.user_id = :user_id
+                )
+                SELECT folder_id FROM descendants
+            ''').bindparams(bindparam("folder_ids", expanding=True)),
+            {"folder_ids": folder_ids, "user_id": user_id}
+        ).fetchall()
+
+        descendant_ids = [d[0] for d in descendants]
+
+        if parent_id in descendant_ids:
+            raise HTTPException(status_code=400, detail="Cannot move folder to its descendant")
+
+    # updating the position of the folder
+        db.execute(
+            text('''
+                UPDATE folders SET parent_id = :parent_id, updated_at = :updated_at
+                WHERE folder_id IN :folder_ids
+            ''').bindparams(bindparam("folder_ids", expanding=True)),
+            {"folder_ids": folder_ids, "parent_id": parent_id, "updated_at": datetime.now()}
+        )
+
+    # fetch updated folders
+        updated_folders = db.execute(
+            text('''
+                SELECT folder_id, folder_name, parent_id, user_id, created_at, updated_at
+                FROM folders WHERE folder_id IN :folder_ids
+            ''').bindparams(bindparam("folder_ids", expanding=True)),
+            {"folder_ids": folder_ids}
+        ).fetchall()
+
+    # updating the position of the files
+    if file_ids is not None:
+        db.execute(
+            text('''
+                UPDATE files SET parent_id = :parent_id, updated_at = :updated_at
+                WHERE file_id IN :file_ids
+            ''').bindparams(bindparam("file_ids", expanding=True)),
+            {"file_ids": file_ids, "parent_id": parent_id, "updated_at": datetime.now()}
+        )
+
+        # fetch updated files
+        updated_files = db.execute(
+            text('''
+                SELECT file_id, file_name, parent_id, user_id, created_at, updated_at
+                FROM files WHERE file_id IN :file_ids
+            ''').bindparams(bindparam("file_ids", expanding=True)),
+            {"file_ids": file_ids}
+        ).fetchall()
 
     db.commit()
 
-    if not result:
-        raise HTTPException(status_code=400, detail="Failed to move folder")
+    return {
+        "folders": [dict(r._mapping) for r in updated_folders],
+        "files": [dict(r._mapping) for r in updated_files]
+    }
 
-    return dict(result._mapping)
-
-
-def delete_folder(db, folder_id, user_id):
+def delete_folder(db, folder_ids, user_id,file_ids):
     # get all descendants including self
-    descendant_folders = db.execute(text(
-        '''
-            WITH RECURSIVE descendants AS (
-            SELECT folder_id
-            FROM folders
-            WHERE folder_id = :folder_id AND user_id = :user_id
-            UNION ALL
-            SELECT f.folder_id
-            FROM folders f
-            INNER JOIN descendants d ON f.parent_id = d.folder_id
-            WHERE f.user_id = :user_id
-            )
-            SELECT folder_id FROM descendants;
-        '''
-    ), {"folder_id": folder_id,
-        "user_id": user_id}).fetchall()
+    if folder_ids:
+        descendant_folders = db.execute(
+            text('''
+                WITH RECURSIVE descendants AS (
+                    SELECT folder_id
+                    FROM folders
+                    WHERE folder_id IN :folder_ids AND user_id = :user_id
+                    UNION ALL
+                    SELECT f.folder_id
+                    FROM folders f
+                    INNER JOIN descendants d ON f.parent_id = d.folder_id
+                    WHERE f.user_id = :user_id
+                )
+                SELECT folder_id FROM descendants;
+            ''').bindparams(bindparam("folder_ids", expanding=True)),
+            {"folder_ids": folder_ids, "user_id": user_id}
+        ).fetchall()
 
-    descendant_ids = [f[0] for f in descendant_folders]
-    if not descendant_ids:
-        raise HTTPException(status_code=400, detail="Folder not found")
+        descendant_ids = [f[0] for f in descendant_folders]
+        if not descendant_ids:
+            raise HTTPException(status_code=400, detail="Folder not found")
 
-    placeholders = ", ".join([f":id{i}" for i in range(len(descendant_ids))])
-    params = {f"id{i}": descendant_ids[i] for i in range(len(descendant_ids))}
+        placeholders = ", ".join([f":id{i}" for i in range(len(descendant_ids))])
+        
+        params = {
+            **{f"id{i}": descendant_ids[i] for i in range(len(descendant_ids))},
+            "updated_at": datetime.now(),
+            "status": "deleted"
+        }
 
-    # Delete all children files
-    db.execute(text(f"DELETE FROM files WHERE parent_id IN ({placeholders})"), params)
+        # Soft-delete all files inside these folders
+        db.execute(
+            text(f"""
+                UPDATE files 
+                SET parent_id = NULL, updated_at = :updated_at, status = :status 
+                WHERE parent_id IN ({placeholders})
+            """),
+            params
+        )  
+        # Hard delete all descendant folders
+        db.execute(
+            text(f"DELETE FROM folders WHERE folder_id IN ({placeholders})"),
+            params
+        )
 
-    # Delete all children folders
-    db.execute(text(f"DELETE FROM folders WHERE folder_id IN ({placeholders})"), params)
+        db.commit()
+    if file_ids:
+        db.execute(text(
+            '''
+            DELETE FROM files
+            WHERE file_id IN :file_ids AND user_id = :user_id
+            '''
+        ).bindparams(bindparam("file_ids", expanding=True)),
+        {"file_ids": file_ids, "user_id": user_id}
+        )
+        db.commit()
 
-    db.commit()
     return {"message": "Folder deleted successfully"}
 
 
-@router.delete('/folder_delete')
-def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_current_user), folder_id: int = None):
-    user_id = current_user["user_id"]
-    
+@router.delete('/bulk_delete')
+def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_current_user), folder_ids: list[int] = Form(None) , file_ids: list[int] = Form(None)):
     #check for permission of the user
     # -- some code here to check permission --
-    message = delete_folder(db, folder_id, user_id)
+    
+    user_id = current_user["user_id"]
+    message = delete_folder(db, folder_ids, user_id,file_ids)
     return message
 
 @router.get('/get_all_children')
@@ -247,7 +316,7 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
         '''
             SELECT folder_id,folder_name,parent_id,user_id,created_at,updated_at
             FROM folders
-            WHERE user_id = :user_id AND parent_id = :folder_id
+            WHERE user_id = :user_id AND parent_id = :folder_id 
         '''
     ),{
         "folder_id": folder_id,
@@ -258,7 +327,7 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
         '''
             SELECT file_id,file_name,parent_id,user_id,created_at,updated_at
             FROM files
-            WHERE user_id = :user_id AND parent_id = :folder_id
+            WHERE user_id = :user_id AND parent_id = :folder_id AND status != 'deleted' 
         '''
     ),{
         "folder_id": folder_id,
@@ -269,5 +338,7 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
     files_list = [dict(f._mapping) for f in files]
 
     return {"folders": folders_list, "files": files_list}
+
+
 
 
