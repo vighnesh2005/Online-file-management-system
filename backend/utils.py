@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from database import engine
-
+from sqlalchemy import text
 # ---------- Config ----------
 JWT_SECRET = "orewa monkey d luffy"  # use env var in production
 JWT_ALGORITHM = "HS256"
@@ -45,3 +45,94 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def check_permission(db, user_id: int, folder_id: int = None, file_id: int = None, operation: str = 'view'):
+    # Check for file permissions
+    if file_id:
+        owner = db.execute(
+            text("SELECT user_id, parent_id FROM files WHERE file_id = :file_id"),
+            {"file_id": file_id}
+        ).fetchone()
+
+        if owner is None:
+            return False  # file doesn't exist
+
+        if owner[0] == user_id:
+            return True  # user owns the file
+
+        # Check public share
+        public = db.execute(
+            text("SELECT is_public FROM shares WHERE file_id = :file_id AND is_public = 1"),
+            {"file_id": file_id}
+        ).fetchone()
+        if public and operation == 'view':
+            return True
+
+        # Check explicit user share
+        shares = db.execute(
+            text("""
+                SELECT s.permission
+                FROM shares s
+                JOIN share_access sa ON s.share_id = sa.share_id
+                WHERE sa.user_id = :user_id AND s.file_id = :file_id
+            """),
+            {"user_id": user_id, "file_id": file_id}
+        ).fetchone()
+        if shares:
+            if operation == "view" and shares.permission in ("view", "edit"):
+                return True
+            if operation == "edit" and shares.permission == "edit":
+                return True
+
+        # Check parent folder recursively
+        if owner[1] not in (0, None):
+            return check_permission(db, user_id, folder_id=owner[1], operation=operation)
+
+        return False
+
+    # Check for folder permissions
+    else:
+        owner = db.execute(
+            text("SELECT user_id, parent_id FROM folders WHERE folder_id = :folder_id"),
+            {"folder_id": folder_id}
+        ).fetchone()
+
+        if owner is None:
+            return False  # folder doesn't exist
+
+        if owner[0] == user_id:
+            return True  
+        
+
+        # Check public share
+        public = db.execute(
+            text("SELECT is_public FROM shares WHERE folder_id = :folder_id AND is_public = 1"),
+            {"folder_id": folder_id}
+        ).fetchone()
+        if public and operation == 'view':
+            return True
+
+        # Check explicit user share
+        shares = db.execute(
+            text("""
+                SELECT s.permission
+                FROM shares s
+                JOIN share_access sa ON s.share_id = sa.share_id
+                WHERE sa.user_id = :user_id AND s.folder_id = :folder_id
+            """),
+            {"user_id": user_id, "folder_id": folder_id}
+        ).fetchone()
+        if shares:
+            if operation == "view" and shares.permission in ("view", "edit"):
+                return True
+            if operation == "edit" and shares.permission == "edit":
+                return True
+
+        if owner[1] not in (0, None):
+            return check_permission(db, user_id, folder_id=owner[1], operation=operation)
+
+        return False
+
+
+        
+        

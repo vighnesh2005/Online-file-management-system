@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends,HTTPException,Form,File,UploadFile
-from utils import get_db
+from utils import get_db,check_permission
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
 from sqlalchemy.orm import Session
 import os, shutil
 from fastapi.responses import FileResponse
+
 
 
 router = APIRouter()    
@@ -16,30 +17,26 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 @router.post('/upload_file')
 def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get_current_user),file: UploadFile = File(...),parent_id: int = Form(None)):
     user_id = current_user["user_id"]
+    #check for permission of the user
+
+    perm = check_permission(db,user_id,folder_id=parent_id,operation='edit')
+    if not perm and parent_id != 0:
+        raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
+    
     USER_DIR =os.path.join(UPLOAD_DIR, f'user_{user_id}')
 
     result = db.execute(text(
         '''
-            SELECT file_name FROM files WHERE file_name = :file_name
+            SELECT file_name FROM files WHERE file_name = :file_name AND parent_id = :parent_id 
         '''
     ),
     {
-        'file_name': file.filename
+        'file_name': file.filename,
+        'parent_id': parent_id
     }).fetchone()
     if result :
         raise HTTPException(status_code=400, detail="File already exists")
     
-    result = db.execute(text(
-        '''
-            select user_id from folders where folder_id = :parent_id AND user_id = :user_id
-        '''
-    ),{
-        "parent_id": parent_id,
-        "user_id": user_id
-    }).fetchone()
-
-    if not result or result[0] != user_id:
-        raise HTTPException(status_code=400, detail="Invalid parent folder")
 
     os.makedirs(USER_DIR, exist_ok=True)
 
@@ -93,8 +90,9 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
 def download_file(db: Session = Depends(get_db) , current_user = Depends(get_current_user),file_id: int = None):
     user_id = current_user["user_id"]
 
-    #check for permission of the user
-    # -- some code here to check permission --
+    perm = check_permission(db,user_id,file_id=file_id,operation='view')
+    if not perm:
+        raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
 
     result = db.execute(text(
         '''
@@ -120,8 +118,9 @@ def download_file(db: Session = Depends(get_db) , current_user = Depends(get_cur
 def file_metadata(db: Session = Depends(get_db) , current_user = Depends(get_current_user),file_id: int = None):
     user_id = current_user["user_id"]
 
-    #check for permission of the user
-    # -- some code here to check permission --
+    perm = check_permission(db,user_id,file_id=file_id,operation='view')
+    if not perm:
+        raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
 
     result = db.execute(text(
         '''
@@ -141,7 +140,9 @@ def rename_file(db: Session = Depends(get_db) , current_user = Depends(get_curre
     user_id = current_user['user_id']
 
     #check for permission of the user
-    # -- some code here to check permission --
+    perm = check_permission(db,user_id,file_id=file_id,operation='edit')
+    if not perm:
+        raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
 
     parent_id = db.execute(text(
         '''

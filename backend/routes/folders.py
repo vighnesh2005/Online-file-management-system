@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends,HTTPException,Form
-from utils import get_db
+from utils import get_db,check_permission
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
 from sqlalchemy.orm import Session
+
 
 
 router = APIRouter()
@@ -14,23 +15,14 @@ def create_folder(db: Session = Depends(get_db), current_user: dict = Depends(ge
                    folder_name: str = Form(...), parent_id: int = Form(...)):
     user_id = current_user["user_id"]
 
-    # check for permission of the user
-    # -- some code here to check permission --
 
-    if folder_name is None:
-        return HTTPException(status_code=400, detail="folder_name is required")
+    perm = check_permission(db,user_id,folder_id=parent_id,operation='edit')
+    if not perm and parent_id != 0:
+        raise HTTPException(status_code=400, detail="You don't have permission to create a folder in this folder")
     
-    #checking if the parent folder exists
-    if parent_id != 0 :
-        result = db.execute(text(
-            '''SELECT user_id FROM FOLDERS
-                WHERE folder_id = :parent_id AND user_id = :user_id''' 
-        ),{
-            "parent_id": parent_id,
-            "user_id": user_id
-        }).fetchone()
-        if not result:
-            return HTTPException(status_code=400, detail="Invalid parent folder")
+    if folder_name is None:
+        raise HTTPException(status_code=400, detail="folder_name is required")
+    
     
     #checking if the folder_name is already taken
     search_folder = db.execute(text(
@@ -44,7 +36,7 @@ def create_folder(db: Session = Depends(get_db), current_user: dict = Depends(ge
     })
 
     if search_folder.fetchone():
-        return HTTPException(status_code=400, detail="Folder already exists")
+        raise HTTPException(status_code=400, detail="Folder already exists")
 
     #inserting into the database
     result = db.execute(text(
@@ -91,10 +83,12 @@ def folder_rename(db: Session = Depends(get_db), current_user: dict = Depends(ge
                   folder_id: int = Form(...), folder_name: str = Form(...),parent_id: int = Form(...)):
     user_id = current_user["user_id"]
     # check for permission of the user
-    # -- some code here to check permission --
-        
+    perm = check_permission(db,user_id,folder_id=folder_id,operation='edit')
+    if not perm:
+        raise HTTPException(status_code=400, detail="You don't have permission to rename this folder")
+
     if folder_name is None:
-        return HTTPException(status_code=400, detail="folder_name is required")
+        raise HTTPException(status_code=400, detail="folder_name is required")
     
     #check if the new name is already taken
     result = db.execute(text(
@@ -242,12 +236,11 @@ def delete_folder(db, folder_ids, user_id,file_ids):
                 WITH RECURSIVE descendants AS (
                     SELECT folder_id
                     FROM folders
-                    WHERE folder_id IN :folder_ids AND user_id = :user_id
+                    WHERE folder_id IN :folder_ids
                     UNION ALL
                     SELECT f.folder_id
                     FROM folders f
                     INNER JOIN descendants d ON f.parent_id = d.folder_id
-                    WHERE f.user_id = :user_id
                 )
                 SELECT folder_id FROM descendants;
             ''').bindparams(bindparam("folder_ids", expanding=True)),
@@ -285,11 +278,11 @@ def delete_folder(db, folder_ids, user_id,file_ids):
     if file_ids:
         db.execute(text(
             '''
-            DELETE FROM files
-            WHERE file_id IN :file_ids AND user_id = :user_id
+            UPDATE files SET parent_id = NULL, updated_at = :updated_at, status = 'deleted'
+            WHERE file_id IN :file_ids 
             '''
         ).bindparams(bindparam("file_ids", expanding=True)),
-        {"file_ids": file_ids, "user_id": user_id}
+        {"file_ids": file_ids, "user_id": user_id , "updated_at": datetime.now()}
         )
         db.commit()
 
@@ -297,12 +290,19 @@ def delete_folder(db, folder_ids, user_id,file_ids):
 
 
 @router.delete('/bulk_delete')
-def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_current_user), folder_ids: list[int] = Form(None) , file_ids: list[int] = Form(None)):
-    #check for permission of the user
-    # -- some code here to check permission --
-    
+def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_current_user), folder_ids: list[int] = Form(None) , file_ids: list[int] = Form(None)):    
     user_id = current_user["user_id"]
-    message = delete_folder(db, folder_ids, user_id,file_ids)
+    folder_ids = folder_ids or []
+    file_ids = file_ids or []
+
+    #check permission before deleting
+    folders , files = [],[]
+    for i in folder_ids:
+        if check_permission(db,user_id,folder_id=i,operation='edit'): folders.append(i)
+    for i in file_ids:
+        if check_permission(db,user_id,file_id=i,operation='edit'): files.append(i)
+    
+    message = delete_folder(db, folders, user_id,files)
     return message
 
 @router.get('/get_all_children')
@@ -310,24 +310,30 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
     user_id = current_user["user_id"]
 
     #check for permission of the user
-    # -- some code here to check permission --
+    perm = check_permission(db,user_id,folder_id=folder_id,operation='edit')
+
+    if folder_id == 0:
+        perm = 1
+
+
+    if not perm:
+        raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
 
     folders = db.execute(text(
         '''
             SELECT folder_id,folder_name,parent_id,user_id,created_at,updated_at
             FROM folders
-            WHERE user_id = :user_id AND parent_id = :folder_id 
+            WHERE  parent_id = :folder_id 
         '''
     ),{
         "folder_id": folder_id,
-        "user_id": user_id
     }).fetchall()
     
     files = db.execute(text(
         '''
             SELECT file_id,file_name,parent_id,user_id,created_at,updated_at
             FROM files
-            WHERE user_id = :user_id AND parent_id = :folder_id AND status != 'deleted' 
+            WHERE parent_id = :folder_id AND status != 'deleted' 
         '''
     ),{
         "folder_id": folder_id,

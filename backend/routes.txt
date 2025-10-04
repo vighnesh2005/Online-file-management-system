@@ -32,6 +32,3 @@ GET /search?q=...
 GET /files/recent
 GET /files/starred (optional)
 POST /files/:id/star / DELETE /files/:id/star
-
-Activity
-GET /activity
