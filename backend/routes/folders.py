@@ -310,7 +310,7 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
     user_id = current_user["user_id"]
 
     #check for permission of the user
-    perm = check_permission(db,user_id,folder_id=folder_id,operation='edit')
+    perm = check_permission(db,user_id,folder_id=folder_id,operation='view')
 
     if folder_id == 0:
         perm = True

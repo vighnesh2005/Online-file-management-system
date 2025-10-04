@@ -42,7 +42,7 @@ def share(db: Session = Depends(get_db) , current_user = Depends(get_current_use
         'permission': permission,
         'created_at': datetime.now(),
         'updated_at': datetime.now(),
-        'is_public': is_public
+        'is_public': is_public,
     })
 
     share_id = result.lastrowid
@@ -117,5 +117,143 @@ def share_details(db: Session = Depends(get_db), file_id: int = None, folder_id:
 
     return {"shares": result}
 
+@router.get('/get_shares')
+def get_shares(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user) , token: str = None):
+    user_id = current_user["user_id"]
 
+    share = db.execute(text(
+        '''
+            SELECT file_id,folder_id FROM shares WHERE token = :token
+        '''
+    ),{
+        "token": token
+    }).fetchone()
 
+    if not share:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    files, folders = [],[]
+    if share.file_id:
+        result = db.execute(text(
+            '''
+                SELECT file_id,file_name FROM files WHERE file_id = :file_id
+            '''
+        ),{
+            "file_id": share.file_id
+        })
+
+        files = [dict(row._mapping) for row in result]
+    else:
+        result = db.execute(text(
+            '''
+                SELECT folder_id,folder_name FROM folders WHERE folder_id = :folder_id
+            '''
+        ),{
+            "folder_id": share.folder_id
+        })
+
+        folders = [dict(row._mapping) for row in result]
+
+    return {"files": files, "folders": folders}
+
+@router.put('/update_shares')
+def update_shares(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user),
+                  share_id:int = Form(None), is_public: bool = Form(False), permission: str = Form(None),
+                  emails: list[str] = Form([])):
+    user_id = current_user["user_id"]
+
+    share = db.execute(text('''
+        SELECT s.share_id, s.folder_id, s.file_id,
+            COALESCE(f.user_id, fi.user_id) AS owner_id
+        FROM shares s
+        LEFT JOIN folders f ON s.folder_id = f.folder_id
+        LEFT JOIN files fi ON s.file_id = fi.file_id
+        WHERE s.share_id = :share_id
+        '''), 
+        {"share_id": share_id}).fetchone()
+    
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    if share.owner_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to update this share")
+
+    update_query = '''
+        UPDATE shares 
+        SET updated_at = :updatedat    
+    '''
+
+    params = {
+        'updatedat': datetime.now(),
+        'share_id': share_id
+    }
+
+    if permission is not None:
+        update_query += ',permission = :permission'
+        params['permission'] = permission
+
+    if is_public is not None:
+        update_query += ',is_public = :is_public'
+        params['is_public'] = is_public
+
+    update_query += ' WHERE share_id = :share_id'
+    db.execute(text(update_query), params)
+
+    if emails:
+        db.execute(text('''
+            DELETE FROM share_access WHERE share_id = :share_id
+        '''),{
+            "share_id": share_id
+        })
+
+        for email in emails:
+            user = db.execute(text('SELECT user_id FROM users WHERE email = :email'), {"email": email}).fetchone()
+            if not user:
+                continue
+
+            db.execute(text('''
+                INSERT INTO share_access (share_id, user_id)
+                VALUES (:share_id, :user_id)
+            '''), {"share_id": share_id, "user_id": user.user_id})
+        
+    db.commit()
+    return {"message": "Share updated successfully"}
+    
+@router.delete('/delete_share')
+def delete_share(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), share_id:int = Form(None)):
+    user_id = current_user["user_id"]
+
+    share = db.execute(text('''
+        SELECT s.share_id, s.folder_id, s.file_id,
+            COALESCE(f.user_id, fi.user_id) AS owner_id
+        FROM shares s
+        LEFT JOIN folders f ON s.folder_id = f.folder_id
+        LEFT JOIN files fi ON s.file_id = fi.file_id
+        WHERE s.share_id = :share_id
+        '''), 
+        {"share_id": share_id}).fetchone()
+
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    if share.owner_id != user_id:
+        raise HTTPException(status_code=403, detail="You don't have permission to delete this share")
+    
+    db.execute(text(
+        '''
+            DELETE FROM share_access WHERE share_id = :share_id
+        '''
+    ),{
+        "share_id": share_id
+    })
+
+    db.execute(text(
+        '''
+            DELETE FROM shares WHERE share_id = :share_id
+        '''
+    ),{
+        "share_id": share_id
+    })
+
+    db.commit()
+    return {"message": "Share deleted successfully"}
