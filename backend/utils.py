@@ -5,8 +5,12 @@ from fastapi import HTTPException, status
 from passlib.context import CryptContext
 from database import engine
 from sqlalchemy import text
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 # ---------- Config ----------
-JWT_SECRET = "orewa monkey d luffy"  # use env var in production
+JWT_SECRET = os.getenv("JWT_SECRET") # use env var in production
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
 

@@ -40,6 +40,7 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
 
     os.makedirs(USER_DIR, exist_ok=True)
 
+    
     result = db.execute(text(
         '''
             INSERT INTO FILES (file_name,parent_id,user_id,created_at,updated_at,status) 
@@ -54,7 +55,7 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
         "updated_at": datetime.now()
     }).fetchone()
 
-    file_path = os.path.join(USER_DIR,f'{result[0]}')
+    file_path = os.path.join(USER_DIR,f'{result[0]}_{file.filename}')
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)

@@ -15,7 +15,7 @@ def recyclebin(db: Session = Depends(get_db) , current_user = Depends(get_curren
 
     files = db.execute(text(
         '''
-            SELECT file_id,file_name FROM files WHERE user_id = :user_id AND status = 'deleted'     
+            SELECT file_id,file_name,file_path FROM files WHERE user_id = :user_id AND status = 'deleted'     
         '''
     ),{
         'user_id':user_id
@@ -75,22 +75,27 @@ def permanent_delete(db: Session = Depends(get_db) , current_user = Depends(get_
     for file_path, in results:
         os.remove(file_path)
 
+    try:
+        query = text(
+            '''
+            DELETE FROM files
+            WHERE file_id IN :file_ids AND user_id = :user_id
+            '''
+        ).bindparams(bindparam("file_ids", expanding=True), bindparam("user_id"))
 
-    query = text(
-        '''
-        DELETE FROM files
-        WHERE file_id IN :file_ids AND user_id = :user_id
-        '''
-    ).bindparams(bindparam("file_ids", expanding=True), bindparam("user_id"))
+        db.execute(
+            query
+        ,{
+            'file_ids':file_ids,
+            'user_id':user_id
+        })      
 
-    db.execute(
-        query
-    ,{
-        'file_ids':file_ids,
-        'user_id':user_id
-    })    
-
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Error deleting files")
+    
     db.commit()
 
     return {'message':'Files permanently deleted successfully'}
+
 
