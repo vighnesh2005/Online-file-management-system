@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+
+:root {
+  --color-primary: #1A73E8;   /* Google Blue */
+  --color-primary-hover: #1669C1;
+  --color-accent: #34A853;    /* Google Green */
+  --color-accent-hover: #2C8C44;
+  --color-error: #EA4335;     /* Google Red */
+  --color-error-bg: #FEECEC;
+  --color-bg: #FFFFFF;
+  --color-surface: #F1F3F4;
+  --color-text-primary: #202124;
+  --color-text-secondary: #5F6368;
+  --color-border: #E0E0E0;
+}
+
+/* Optional Dark Mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #121212;
+    --color-surface: #1E1E1E;
+    --color-text-primary: #F1F3F4;
+    --color-text-secondary: #A1A1A1;
+    --color-border: #2E2E2E;
+  }
+}
+
+/* Utility Classes */
+.bg-primary {
+  @apply bg-[var(--color-primary)] text-white;
+}
+
+.bg-primary-hover:hover {
+  @apply bg-[var(--color-primary-hover)];
+}
+
+.text-primary {
+  color: var(--color-primary);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.bg-surface {
+  background-color: var(--color-surface);
+}
+
+.bg-accent {
+  background-color: var(--color-accent);
+  color: #fff;
+}
+
+.bg-accent-hover:hover {
+  background-color: var(--color-accent-hover);
+}
+
+.text-error {
+  color: var(--color-error);
+}
+
+.bg-error {
+  background-color: var(--color-error-bg);
+}
+
+.border-default {
+  border-color: var(--color-border);
+}

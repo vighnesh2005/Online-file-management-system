@@ -4,8 +4,9 @@ from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
 from sqlalchemy.orm import Session
-
-
+import zipfile
+from fastapi.responses import StreamingResponse
+from io import BytesIO
 
 router = APIRouter()
 
@@ -58,7 +59,7 @@ def create_folder(db: Session = Depends(get_db), current_user: dict = Depends(ge
     if not new_folder:
         raise HTTPException(status_code=400, detail="Failed to create folder")
 
-    return dict(new_folder._mapping)
+    return {"message": "Folder created successfully", "folder": dict(new_folder._mapping)}
 
 #get details of the folder
 @router.get('/get_folder_details')
@@ -75,7 +76,7 @@ def get_folder_details(db: Session = Depends(get_db), current_user: dict = Depen
     if not folders:
         raise HTTPException(status_code=400, detail="No folders found")
     
-    return dict(folders._mapping)
+    return {"message": "Folder details", "folder": dict(folders._mapping)}
 
 #rename a folder
 @router.put('/folder_rename')
@@ -133,7 +134,7 @@ def folder_move(
 ):
     user_id = current_user["user_id"]
 
-    # check if the folder belongs to the user or not
+    # check if the folder belongs to the user
     if folder_ids is not None:
         result = db.execute(
             text('''
@@ -145,7 +146,7 @@ def folder_move(
         if len(result) != len(folder_ids):
             raise HTTPException(status_code=400, detail="Folder not found")
     
-    # check if the file belongs to the user or not
+    # check if the file belongs to the user
     if file_ids is not None:
         result = db.execute(
             text('''
@@ -157,24 +158,22 @@ def folder_move(
         if len(result) != len(file_ids):
             raise HTTPException(status_code=400, detail="File not found")
 
-    updated_folders = []
-    updated_files = []
 
     if folder_ids is not None:
-    # check if the folder is moved to its descendant
+    # check if the folder is moved to its children or itself
         descendants = db.execute(
             text('''
                 WITH RECURSIVE descendants AS (
-                    SELECT folder_id
-                    FROM folders
-                    WHERE parent_id IN :folder_ids AND user_id = :user_id
-                    UNION ALL
-                    SELECT f.folder_id
-                    FROM folders f
-                    JOIN descendants d ON f.parent_id = d.folder_id
-                    WHERE f.user_id = :user_id
-                )
-                SELECT folder_id FROM descendants
+                SELECT folder_id
+                FROM folders
+                WHERE folder_id IN :folder_ids
+                UNION ALL
+                SELECT f.folder_id
+                FROM folders f
+                JOIN descendants d ON f.parent_id = d.folder_id
+                WHERE f.user_id = :user_id
+            )
+            SELECT folder_id FROM descendants
             ''').bindparams(bindparam("folder_ids", expanding=True)),
             {"folder_ids": folder_ids, "user_id": user_id}
         ).fetchall()
@@ -184,7 +183,8 @@ def folder_move(
         if parent_id in descendant_ids:
             raise HTTPException(status_code=400, detail="Cannot move folder to its descendant")
 
-    # updating the position of the folder
+    # updating the positions of the folders if they exist
+    if folder_ids is not None:
         db.execute(
             text('''
                 UPDATE folders SET parent_id = :parent_id, updated_at = :updated_at
@@ -193,16 +193,7 @@ def folder_move(
             {"folder_ids": folder_ids, "parent_id": parent_id, "updated_at": datetime.now()}
         )
 
-    # fetch updated folders
-        updated_folders = db.execute(
-            text('''
-                SELECT folder_id, folder_name, parent_id, user_id, created_at, updated_at
-                FROM folders WHERE folder_id IN :folder_ids
-            ''').bindparams(bindparam("folder_ids", expanding=True)),
-            {"folder_ids": folder_ids}
-        ).fetchall()
-
-    # updating the position of the files
+    # updating the positions of the files if they exist
     if file_ids is not None:
         db.execute(
             text('''
@@ -212,24 +203,33 @@ def folder_move(
             {"file_ids": file_ids, "parent_id": parent_id, "updated_at": datetime.now()}
         )
 
-        # fetch updated files
-        updated_files = db.execute(
-            text('''
-                SELECT file_id, file_name, parent_id, user_id, created_at, updated_at
-                FROM files WHERE file_id IN :file_ids
-            ''').bindparams(bindparam("file_ids", expanding=True)),
-            {"file_ids": file_ids}
-        ).fetchall()
 
     db.commit()
 
+    new_files = db.execute(text(
+        '''
+            SELECT * from files WHERE parent_id = :parent_id
+        '''
+    ),{
+        'parent_id': parent_id
+    }).fetchall()
+
+    new_folders = db.execute(text(
+        '''
+            SELECT * FROM folders WHERE parent_id = :parent_id
+        '''
+    ),{
+        'parent_id': parent_id
+    }).fetchall()
+
     return {
-        "folders": [dict(r._mapping) for r in updated_folders],
-        "files": [dict(r._mapping) for r in updated_files]
+        "message": "moved successfully",
+        "folders": [dict(r._mapping) for r in new_folders],
+        "files": [dict(r._mapping) for r in new_files]
     }
 
 def delete_folder(db, folder_ids, user_id,file_ids):
-    # get all descendants including self
+    # get all children including self
     if folder_ids:
         descendant_folders = db.execute(
             text('''
@@ -268,7 +268,7 @@ def delete_folder(db, folder_ids, user_id,file_ids):
             """),
             params
         )  
-        # Hard delete all descendant folders
+        # Hard delete all children folders
         db.execute(
             text(f"DELETE FROM folders WHERE folder_id IN ({placeholders})"),
             params
@@ -289,7 +289,7 @@ def delete_folder(db, folder_ids, user_id,file_ids):
     return {"message": "Folder deleted successfully"}
 
 
-@router.delete('/bulk_delete')
+@router.post('/bulk_delete')
 def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_current_user), folder_ids: list[int] = Form(None) , file_ids: list[int] = Form(None)):    
     user_id = current_user["user_id"]
     folder_ids = folder_ids or []
@@ -305,7 +305,7 @@ def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_cur
     message = delete_folder(db, folders, user_id,files)
     return message
 
-@router.get('/get_all_children')
+@router.get('/get_all_children/{folder_id}')
 def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user), folder_id: int = None):
     user_id = current_user["user_id"]
 
@@ -318,6 +318,39 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
 
     if not perm:
         raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
+
+    folders = []
+    files = []
+
+    if folder_id == 0:
+        folders = db.execute(text(
+            '''
+                SELECT folder_id,folder_name,parent_id,user_id,created_at,updated_at
+                FROM folders
+                WHERE parent_id = 0 
+                AND user_id = :user_id
+            '''
+        ),{
+            "user_id": user_id,
+            "parent_id": folder_id
+        }).fetchall()
+        
+        files = db.execute(text(
+            '''
+                SELECT file_id,file_name,parent_id,user_id,created_at,updated_at
+                FROM files
+                WHERE parent_id = 0 AND status != 'deleted'
+                AND user_id = :user_id
+            '''
+        ),{
+            "parent_id": folder_id,
+            "user_id": user_id
+        }).fetchall()
+
+        folders_list = [dict(f._mapping) for f in folders]
+        files_list = [dict(f._mapping) for f in files]
+
+        return {"folders": folders_list, "files": files_list}
 
     folders = db.execute(text(
         '''
@@ -345,6 +378,62 @@ def get_all_childern(db: Session = Depends(get_db), current_user: dict = Depends
 
     return {"folders": folders_list, "files": files_list}
 
+def add_folder_to_zip(zip_file: zipfile.ZipFile, folder_id: int, db: Session, parent_path=""):
+    # Get all the files in the folder
+    files = db.execute(text(
+        "SELECT file_name, file_path FROM files WHERE parent_id = :folder_id AND status='not_deleted'"
+        ),{"folder_id": folder_id}
+    ).fetchall()
+
+    for f in files:
+        file_name, file_path = f
+        zip_file.write(file_path, arcname=f"{parent_path}{file_name}")
+
+    # Get all the subfolders
+    subfolders = db.execute(text(
+        "SELECT folder_id, folder_name FROM folders WHERE parent_id = :folder_id"
+        ),{"folder_id": folder_id}
+    ).fetchall()
+
+    for sub in subfolders:
+        sub_id, sub_name = sub
+        # Add the subfolders to the zip
+        add_folder_to_zip(zip_file, sub_id, db, parent_path=f"{parent_path}{sub_name}/")
 
 
+@router.get("/download_folder/{folder_id}")
+def download_folder(
+    folder_id: int,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user["user_id"]
 
+    # Check user permission
+    perm = check_permission(db, user_id, folder_id=folder_id, operation="view")
+    if not perm:
+        raise HTTPException(status_code=403, detail="You don't have permission to access this folder")
+
+    # Get root folder name
+    folder = db.execute(text(
+        "SELECT folder_name FROM folders WHERE folder_id = :folder_id"),
+        {"folder_id": folder_id}
+    ).fetchone()
+
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+    folder_name = folder[0]
+
+    # Create zip in memory
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+        add_folder_to_zip(zip_file, folder_id, db, parent_path=f"{folder_name}/")
+
+    zip_buffer.seek(0)
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={folder_name}.zip"}
+    )

@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 import os, shutil
 from fastapi.responses import FileResponse
-
+from urllib.parse import quote
 
 
 router = APIRouter()    
@@ -84,37 +84,54 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
     })
 
     db.commit()
-
-    return {"file_id": result[0]}
-
-@router.get('/download_file/{file_id}')
-def download_file(db: Session = Depends(get_db) , current_user = Depends(get_current_user),file_id: int = None):
-    user_id = current_user["user_id"]
-
-    perm = check_permission(db,user_id,file_id=file_id,operation='view')
-    if not perm:
-        raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
-
-    result = db.execute(text(
+    new_file = db.execute(text(
         '''
-            SELECT file_path,file_name FROM files WHERE file_id = :file_id AND status != 'deleted'
+            SELECT * FROM files WHERE file_id = :file_id
         '''
     ),{
-        "file_id": file_id
-    })
-    file = result.fetchone()
+        "file_id": result[0]
+    }).fetchone()
 
+    return {"message": "File uploaded successfully","file": dict(new_file._mapping)}
+
+@router.get('/download_file/{file_id}')
+def download_file(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+    file_id: int = None
+):
+    user_id = current_user["user_id"]
+
+    # Check permission
+    perm = check_permission(db, user_id, file_id=file_id, operation='view')
+    if not perm:
+        raise HTTPException(status_code=403, detail="You don't have permission")
+
+    # Fetch file
+    file = db.execute(
+        text("SELECT file_path, file_name FROM files WHERE file_id = :file_id AND status != 'deleted'"),
+        {"file_id": file_id}
+    ).fetchone()
 
     if not file:
-        raise HTTPException(status_code=400, detail="File not found")
-    
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = os.path.abspath(file.file_path)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found on server")
+
+    # Use quote to handle special characters in filename
+    safe_filename = quote(file.file_name)
+
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"
+    }
 
     return FileResponse(
-        path = file.file_path,
-        filename = file.file_name,
-        media_type="application/octet-stream"
+        path=file_path,
+        media_type="application/octet-stream",
+        headers=headers
     )
-
 @router.get('/file_metadata')
 def file_metadata(db: Session = Depends(get_db) , current_user = Depends(get_current_user),file_id: int = None):
     user_id = current_user["user_id"]

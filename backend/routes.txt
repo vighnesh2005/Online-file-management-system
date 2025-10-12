@@ -27,8 +27,3 @@ POST /files/:id/permissions
 GET /files/:id/permissions
 DELETE /files/:id/permissions/:userId
 
-Search
-GET /search?q=...
-GET /files/recent
-GET /files/starred (optional)
-POST /files/:id/star / DELETE /files/:id/star

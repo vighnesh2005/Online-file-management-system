@@ -57,12 +57,19 @@ def check_permission(db, user_id: int, folder_id: int = None, file_id: int = Non
             text("SELECT user_id, parent_id FROM files WHERE file_id = :file_id"),
             {"file_id": file_id}
         ).fetchone()
+        import logging
+        logger = logging.getLogger("uvicorn.error") 
+        
+        logger.info(f"File ID: {file_id}")
+        logger.info(f"Owner row: {owner}")
+        logger.info(f"User ID: {user_id}")
 
         if owner is None:
             return False  # file doesn't exist
 
-        if owner[0] == user_id:
+        if str(owner[0]) == str(user_id):
             return True  # user owns the file
+
 
         # Check public share
         public = db.execute(

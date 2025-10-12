@@ -15,8 +15,8 @@ router = APIRouter()
 async def signup(data: SignupIn):
     with engine.connect() as conn:
         # check existing username or email
-        q_user = text("SELECT user_id FROM users WHERE username = :username OR email = :email")
-        existing = conn.execute(q_user, {"username": data.username, "email": data.email}).fetchone()
+        q_user = text("SELECT user_id FROM users WHERE email = :email")
+        existing = conn.execute(q_user, { "email": data.email}).fetchone()
         if existing:
             raise HTTPException(status_code=400, detail="Username or email already exists")
 
