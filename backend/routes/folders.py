@@ -278,7 +278,7 @@ def delete_folder(db, folder_ids, user_id,file_ids):
     if file_ids:
         db.execute(text(
             '''
-            UPDATE files SET parent_id = NULL, updated_at = :updated_at, status = 'deleted'
+            UPDATE files SET parent_id = 0, updated_at = :updated_at, status = 'deleted'
             WHERE file_id IN :file_ids 
             '''
         ).bindparams(bindparam("file_ids", expanding=True)),

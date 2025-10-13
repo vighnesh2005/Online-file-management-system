@@ -51,7 +51,7 @@ def restore(db: Session = Depends(get_db) , current_user = Depends(get_current_u
 
 
 #permanantly delete files
-@router.delete('/permanent_delete')
+@router.post('/permanent_delete')
 def permanent_delete(db: Session = Depends(get_db) , current_user = Depends(get_current_user),file_ids: list[int] = Form(None)):
     user_id = current_user["user_id"]
 

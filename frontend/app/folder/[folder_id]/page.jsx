@@ -5,7 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
 import { Folder, File, Download, UserPlus, Pencil } from "lucide-react";
 import Link from "next/link";
-import streamSaver from "streamsaver";
+import dynamic from "next/dynamic";
+const streamSaver = dynamic(() => import("streamsaver"), { ssr: false });
 
 export default function Home() {
   const {
@@ -119,8 +120,6 @@ export default function Home() {
     setRenameTarget(null);
   };
 
-  // ===== File Download =====
-
 const handleDownload = async (file_id, file_name) => {
   try {
     const token = localStorage.getItem("token");
@@ -136,15 +135,17 @@ const handleDownload = async (file_id, file_name) => {
       return;
     }
 
-    // Stream to disk using StreamSaver
+    // ✅ Dynamically import streamsaver on client
+    const streamSaver = (await import("streamsaver")).default;
+
+
+    // ✅ Now this works
     const fileStream = streamSaver.createWriteStream(file_name);
     const readableStream = res.body;
 
     if (window.WritableStream && readableStream.pipeTo) {
-      // Modern browsers
       await readableStream.pipeTo(fileStream);
     } else {
-      // Fallback for older browsers
       const reader = readableStream.getReader();
       const writer = fileStream.getWriter();
       const pump = async () => {
@@ -159,7 +160,7 @@ const handleDownload = async (file_id, file_name) => {
       await pump();
     }
 
-    console.log("Download completed!");
+    console.log("✅ Download completed!");
   } catch (err) {
     console.error("Download failed:", err);
     alert("Something went wrong while downloading the file");
@@ -182,7 +183,10 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
       return;
     }
 
-    // Stream response to disk using StreamSaver
+    // ✅ Dynamically import StreamSaver on the client
+    const streamSaver = (await import("streamsaver")).default;
+
+    // Stream response to disk
     const fileStream = streamSaver.createWriteStream(folderName);
     const readableStream = res.body;
 
@@ -204,9 +208,9 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
       await pump();
     }
 
-    alert("Download completed!");
+    console.log("✅ Folder download completed!");
   } catch (err) {
-    console.error(err);
+    console.error("Folder download failed:", err);
     alert("Something went wrong while downloading the folder");
   }
 };

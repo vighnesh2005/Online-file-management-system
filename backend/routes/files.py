@@ -109,7 +109,7 @@ def download_file(
 
     # Fetch file
     file = db.execute(
-        text("SELECT file_path, file_name FROM files WHERE file_id = :file_id AND status != 'deleted'"),
+        text("SELECT file_path, file_name FROM files WHERE file_id = :file_id "),
         {"file_id": file_id}
     ).fetchone()
 
