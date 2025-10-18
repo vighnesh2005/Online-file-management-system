@@ -8,13 +8,22 @@ import {
   Download,
   Trash2,
   ArchiveRestore,
+  ArrowLeft,
+  Search,
+  Grid,
+  List,
+  RotateCcw,
+  X
 } from "lucide-react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 
 const RecycleBin = () => {
   const [files, setFiles] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [selectMode, setSelectMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState("grid");
 
   const { token, hydrated } = useAppContext();
 
@@ -160,85 +169,241 @@ const handleDownload = async (file_id, file_name) => {
   }
 };
 
+  // Filter files based on search
+  const filteredFiles = files.filter(file => 
+    file.file_name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-  <h1 className="text-xl font-semibold">Recycle Bin</h1>
-  
-  <div className="flex gap-2">
-    {/* Delete / Select Button */}
-    <button
-      className={`px-4 py-2 rounded text-white ${
-        selectMode ? "bg-red-600 hover:bg-red-700" : "bg-gray-600 hover:bg-gray-700"
-      }`}
-      onClick={handleMainButtonClick}
-    >
-      {selectMode
-        ? selectedFiles.length > 0
-          ? "Delete Selected"
-          : "Cancel"
-        : "Select Files"}
-    </button>
-
-    {/* Restore Button */}
-    <button
-      className={`px-4 py-2 rounded text-white ${
-        selectMode ? "bg-green-600 hover:bg-green-700" : "bg-gray-600 hover:bg-gray-700"
-      }`}
-      onClick={handleRestoreButtonClick}
-    >
-      {selectMode
-        ? selectedFiles.length > 0
-          ? "Restore Selected"
-          : "Cancel"
-        : "Restore Files"}
-    </button>
-  </div>
-</div>
-
-      <div>
-        {files.map((file) => (
-          <div
-            key={file.file_id}
-            className={`bg-white shadow-sm rounded-md p-3 mb-2 border flex items-center justify-between ${
-              selectedFiles.includes(file.file_id)
-                ? "border-red-400 bg-red-50"
-                : ""
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              {selectMode && (
-                <input
-                  type="checkbox"
-                  checked={selectedFiles.includes(file.file_id)}
-                  onChange={() => toggleFileSelection(file.file_id)}
-                />
-              )}
-              <File className="w-6 h-6 text-gray-700" />
-              <p className="text-sm font-medium">{file.file_name}</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <Link href="/folder/0">
+                <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Recycle Bin</h1>
+                <p className="text-sm text-gray-500">Deleted files and folders</p>
+              </div>
             </div>
-
-            <div className="flex gap-3 items-center">
-              <Download className="w-6 h-6 text-gray-700 cursor-pointer" onClick={() => {handleDownload(file.file_id,file.file_name)}}/>
-              {!selectMode && (
-                <>
-                  <Trash2
-                    className="w-6 h-6 text-red-600 cursor-pointer"
-                    onClick={() => handleDelete([file.file_id])}
-                  />
-                  <ArchiveRestore className="w-6 h-6 text-green-600 cursor-pointer"
-                    onClick={() => {handleRestoreFiles([file.file_id])}}
-                  />
-                </>
-              )}
+            <div className="flex items-center gap-3">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search deleted files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                />
+              </div>
+              
+              {/* View Mode Toggle */}
+              <div className="flex border border-gray-300 rounded-lg">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`p-2 ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                >
+                  <Grid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-2 ${viewMode === "list" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
-        ))}
+        </div>
+      </div>
 
-        {files.length === 0 && (
-          <p className="text-gray-500 text-sm text-center mt-4">
-            No files in Recycle Bin.
-          </p>
+      {/* Action Bar */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {!selectMode ? (
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Select Items
+                </button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600">
+                    {selectedFiles.length} selected
+                  </span>
+                  <button
+                    onClick={() => handleRestoreFiles(selectedFiles)}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <ArchiveRestore className="w-4 h-4" />
+                    Restore Selected
+                  </button>
+                  <button
+                    onClick={() => handleDelete(selectedFiles)}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Forever
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {selectMode && (
+              <button
+                onClick={() => {
+                  setSelectMode(false);
+                  setSelectedFiles([]);
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {viewMode === "grid" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+            {filteredFiles.map(file => (
+              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                <div className="p-4">
+                  {selectMode && (
+                    <div className="mb-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedFiles.includes(file.file_id)}
+                        onChange={() => toggleFileSelection(file.file_id)}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                    </div>
+                  )}
+                  
+                  <div className="flex flex-col items-center text-center">
+                    <div className="p-3 bg-red-100 rounded-lg mb-3 group-hover:bg-red-200 transition-colors">
+                      <File className="w-8 h-8 text-red-600" />
+                    </div>
+                    <h3 className="font-medium text-gray-900 text-sm truncate w-full" title={file.file_name}>
+                      {file.file_name}
+                    </h3>
+                    <p className="text-xs text-gray-500 mt-1">Deleted File</p>
+                  </div>
+                  
+                  {!selectMode && (
+                    <div className="mt-4 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleDownload(file.file_id, file.file_name)}
+                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRestoreFiles([file.file_id])}
+                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Restore"
+                      >
+                        <ArchiveRestore className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete([file.file_id])}
+                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete Forever"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* List View */
+          <div className="space-y-2">
+            {filteredFiles.map(file => (
+              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                <div className="flex items-center justify-between p-4">
+                  <div className="flex items-center gap-4">
+                    {selectMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedFiles.includes(file.file_id)}
+                        onChange={() => toggleFileSelection(file.file_id)}
+                        className="w-4 h-4 text-blue-600 rounded"
+                      />
+                    )}
+                    <div className="p-2 bg-red-100 rounded-lg">
+                      <File className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-gray-900">{file.file_name}</h3>
+                      <p className="text-sm text-gray-500">Deleted File</p>
+                    </div>
+                  </div>
+                  
+                  {!selectMode && (
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => handleDownload(file.file_id, file.file_name)}
+                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRestoreFiles([file.file_id])}
+                        className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                        title="Restore"
+                      >
+                        <ArchiveRestore className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete([file.file_id])}
+                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete Forever"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {filteredFiles.length === 0 && (
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {searchQuery ? 'No results found' : 'Recycle Bin is empty'}
+            </h3>
+            <p className="text-gray-500">
+              {searchQuery 
+                ? `No deleted files match "${searchQuery}"`
+                : 'Deleted files will appear here'
+              }
+            </p>
+          </div>
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { LogIn, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAppContext } from "@/context/context";
 import axios from "axios";
@@ -12,6 +13,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -53,64 +55,84 @@ const Login = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-surface">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-2xl p-8 border border-default">
-        <h1 className="text-3xl font-bold text-primary text-center mb-6">
-          Welcome to G-Drive Clone
-        </h1>
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium  mb-1">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-default rounded-lg text-white bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Enter your email"
-              required
-            />
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 flex items-center justify-center px-4">
+      <div className="w-full max-w-md bg-white shadow-xl rounded-2xl border border-gray-200 overflow-hidden">
+        <div className="px-8 pt-8 pb-4 text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 text-blue-600 mb-3">
+            <LogIn className="w-6 h-6" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
+          <p className="text-sm text-gray-500 mt-1">Sign in to continue to My Drive</p>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border text-white border-default rounded-lg bg-surface focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
+        <div className="px-8 pb-8">
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+            </div>
 
-          {error && (
-            <p className="text-error text-sm text-center">{error}</p>
-          )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-9 pr-10 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                  aria-label="Toggle password visibility"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full py-2 rounded-lg font-semibold transition-all duration-200 ${
-              loading ? "bg-primary-hover" : "bg-primary"
-            }`}
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
-        </form>
+            {error && <p className="text-red-600 text-sm text-center">{error}</p>}
 
-        <p className="text-center text-sm text-secondary mt-4">
-          Don’t have an account?{" "}
-          <span
-            className="text-primary cursor-pointer hover:underline"
-            onClick={() => router.push("/signup")}
-          >
-            Sign up
-          </span>
-        </p>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-2.5 rounded-lg font-semibold text-white transition-all duration-200 ${
+                loading ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {loading ? "Logging in..." : "Login"}
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-gray-600 mt-4">
+            Don’t have an account?
+            <button
+              className="text-blue-600 hover:underline ml-1"
+              onClick={() => router.push("/signup")}
+              type="button"
+            >
+              Sign up
+            </button>
+          </p>
+        </div>
       </div>
     </div>
   );
