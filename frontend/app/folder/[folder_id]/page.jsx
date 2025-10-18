@@ -3,8 +3,9 @@ import { useAppContext } from "@/context/context";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
-import { Folder, File, Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle } from "lucide-react";
+import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import ShareModal from "@/components/ShareModal";
 import TokenSearch from "@/components/TokenSearch";
@@ -162,102 +163,98 @@ export default function Home() {
     setRenameTarget(null);
   };
 
-const handleDownload = async (file_id, file_name) => {
-  try {
-    const token = localStorage.getItem("token");
+  const handleDownload = async (file_id, file_name) => {
+    try {
+      const token = localStorage.getItem("token");
 
-    const res = await fetch(`http://127.0.0.1:8000/files/download_file/${file_id}`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      const res = await fetch(`http://127.0.0.1:8000/files/download_file/${file_id}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (!res.ok) {
-      const error = await res.json();
-      alert(error.detail || error.message || "Download failed");
-      return;
-    }
+      if (!res.ok) {
+        const error = await res.json();
+        alert(error.detail || error.message || "Download failed");
+        return;
+      }
 
-    // ✅ Dynamically import streamsaver on client
-    const streamSaver = (await import("streamsaver")).default;
+      // Dynamically import streamsaver on client
+      const streamSaver = (await import("streamsaver")).default;
 
+      // Now this works
+      const fileStream = streamSaver.createWriteStream(file_name);
+      const readableStream = res.body;
 
-    // ✅ Now this works
-    const fileStream = streamSaver.createWriteStream(file_name);
-    const readableStream = res.body;
-
-    if (window.WritableStream && readableStream.pipeTo) {
-      await readableStream.pipeTo(fileStream);
-    } else {
-      const reader = readableStream.getReader();
-      const writer = fileStream.getWriter();
-      const pump = async () => {
-        const { done, value } = await reader.read();
-        if (done) {
-          writer.close();
-          return;
-        }
-        await writer.write(value);
+      if (window.WritableStream && readableStream.pipeTo) {
+        await readableStream.pipeTo(fileStream);
+      } else {
+        const reader = readableStream.getReader();
+        const writer = fileStream.getWriter();
+        const pump = async () => {
+          const { done, value } = await reader.read();
+          if (done) {
+            writer.close();
+            return;
+          }
+          await writer.write(value);
+          await pump();
+        };
         await pump();
-      };
-      await pump();
+      }
+
+      console.log("Download completed!");
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Something went wrong while downloading the file");
     }
+  };
 
-    console.log("✅ Download completed!");
-  } catch (err) {
-    console.error("Download failed:", err);
-    alert("Something went wrong while downloading the file");
-  }
-};
+  const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
+    try {
+      const token = localStorage.getItem("token");
 
+      const res = await fetch(`http://127.0.0.1:8000/folders/download_folder/${folderId}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
-  try {
-    const token = localStorage.getItem("token");
+      if (!res.ok) {
+        const error = await res.json();
+        alert(error.detail || error.message || "Download failed");
+        return;
+      }
 
-    const res = await fetch(`http://127.0.0.1:8000/folders/download_folder/${folderId}`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      // Dynamically import StreamSaver on the client
+      const streamSaver = (await import("streamsaver")).default;
 
-    if (!res.ok) {
-      const error = await res.json();
-      alert(error.detail || error.message || "Download failed");
-      return;
-    }
+      // Stream response to disk
+      const fileStream = streamSaver.createWriteStream(folderName);
+      const readableStream = res.body;
 
-    // ✅ Dynamically import StreamSaver on the client
-    const streamSaver = (await import("streamsaver")).default;
-
-    // Stream response to disk
-    const fileStream = streamSaver.createWriteStream(folderName);
-    const readableStream = res.body;
-
-    if (window.WritableStream && readableStream.pipeTo) {
-      await readableStream.pipeTo(fileStream);
-    } else {
-      // fallback for older browsers
-      const reader = readableStream.getReader();
-      const writer = fileStream.getWriter();
-      const pump = async () => {
-        const { done, value } = await reader.read();
-        if (done) {
-          writer.close();
-          return;
-        }
-        await writer.write(value);
+      if (window.WritableStream && readableStream.pipeTo) {
+        await readableStream.pipeTo(fileStream);
+      } else {
+        // fallback for older browsers
+        const reader = readableStream.getReader();
+        const writer = fileStream.getWriter();
+        const pump = async () => {
+          const { done, value } = await reader.read();
+          if (done) {
+            writer.close();
+            return;
+          }
+          await writer.write(value);
+          await pump();
+        };
         await pump();
-      };
-      await pump();
+      }
+
+      console.log("Folder download completed!");
+    } catch (err) {
+      console.error("Folder download failed:", err);
+      alert("Something went wrong while downloading the folder");
     }
-
-    console.log("✅ Folder download completed!");
-  } catch (err) {
-    console.error("Folder download failed:", err);
-    alert("Something went wrong while downloading the folder");
-  }
-};
-
-
+  };
 
   // ===== Mode Handling =====
   const toggleMode = (type) => {
@@ -317,23 +314,23 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
   // ====== Move ======
   const handleMove = async () => {
     try {
-    const formData = new FormData();
-      
-      // Use the items from context that were selected for moving
-    folders.forEach(id => formData.append("folder_ids", id));
-    files.forEach(id => formData.append("file_ids", id));
-    formData.append("parent_id", folder_id);
+      const formData = new FormData();
 
-    const res = await axios.put("http://127.0.0.1:8000/folders/bulk_move", formData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-      
-    alert(res.data.message);
-    if (res.data.message === "moved successfully") {
-      setFilesLocal(res.data.files);
-      setFoldersLocal(res.data.folders);
-    }
-      
+      // Use the items from context that were selected for moving
+      folders.forEach(id => formData.append("folder_ids", id));
+      files.forEach(id => formData.append("file_ids", id));
+      formData.append("parent_id", folder_id);
+
+      const res = await axios.put("http://127.0.0.1:8000/folders/bulk_move", formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      alert(res.data.message);
+      if (res.data.message === "moved successfully") {
+        setFilesLocal(res.data.files);
+        setFoldersLocal(res.data.folders);
+      }
+
       // Reset move mode
       setMoveMode(false);
       setFiles([]);
@@ -358,7 +355,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
     formData.append("parent_id", folder_id);
 
     console.log("Creating folder:", newFolderName);
-    const res = await axios.post("http://127.0.0.1:8000/folders/create_folder", 
+    const res = await axios.post("http://127.0.0.1:8000/folders/create_folder",
       formData, { headers: { Authorization: `Bearer ${token}` } });
     alert(res.data.message);
 
@@ -411,10 +408,10 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
 
 
   // Filter items based on search
-  const filteredFiles = filesLocal.filter(file => 
+  const filteredFiles = filesLocal.filter(file =>
     file.file_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  const filteredFolders = foldersLocal.filter(folder => 
+  const filteredFolders = foldersLocal.filter(folder =>
     folder.folder_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -466,7 +463,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
                 />
               </div>
-              
+
               {/* Token Search Button */}
               <button
                 onClick={() => setShowTokenSearch(true)}
@@ -475,7 +472,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                 <Search className="w-4 h-4" />
                 Search Token
               </button>
-              
+
               {/* Recycle Bin Button */}
               <Link href="/recyclebin">
                 <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
@@ -483,7 +480,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                   Recycle Bin
                 </button>
               </Link>
-              
+
               {/* View Mode Toggle */}
               <div className="flex border border-gray-300 rounded-lg">
                 <button
@@ -544,7 +541,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                 </div>
               )}
             </div>
-            
+
             <div className="flex items-center gap-3">
               {!moveMode && (
                 <>
@@ -569,7 +566,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                       </button>
                     </div>
                   )}
-                  
+
                   {!editMode && (
                     <button
                       onClick={() => setEditMode(true)}
@@ -579,7 +576,7 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                       Manage
                     </button>
                   )}
-                  
+
                   {editMode && (
                     <button
                       onClick={() => {
@@ -629,30 +626,30 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                 <div className="p-4">
                   {editMode && (
                     <div className="mb-2">
-                <input
-                  type="checkbox"
-                  checked={selectedFolders.includes(folder.folder_id)}
-                  onChange={e => {
-                    if (e.target.checked)
-                      setSelectedFolders([...selectedFolders, folder.folder_id]);
-                    else
-                      setSelectedFolders(selectedFolders.filter(id => id !== folder.folder_id));
-                  }}
+                      <input
+                        type="checkbox"
+                        checked={selectedFolders.includes(folder.folder_id)}
+                        onChange={e => {
+                          if (e.target.checked)
+                            setSelectedFolders([...selectedFolders, folder.folder_id]);
+                          else
+                            setSelectedFolders(selectedFolders.filter(id => id !== folder.folder_id));
+                        }}
                         className="w-4 h-4 text-blue-600 rounded"
                       />
                     </div>
                   )}
-                  
+
                   <div className="flex flex-col items-center text-center">
                     <div className="p-3 bg-blue-100 rounded-lg mb-3 group-hover:bg-blue-200 transition-colors">
-                      <Folder className="w-8 h-8 text-blue-600" />
+                      <Image src="/folder.svg" alt="Folder" width={32} height={32} />
                     </div>
                     <h3 className="font-medium text-gray-900 text-sm truncate w-full" title={folder.folder_name}>
                       {folder.folder_name}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">Folder</p>
                   </div>
-                  
+
                   {!editMode && (
                     <div className="mt-4 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
@@ -691,13 +688,13 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                     </div>
                   )}
                 </div>
-                
+
                 {!editMode && (
                   <Link href={`/folder/${folder.folder_id}`} className="block">
                     <div className="px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-b-lg transition-colors">
                       <p className="text-xs text-gray-600 text-center">Click to open</p>
                     </div>
-                </Link>
+                  </Link>
                 )}
               </div>
             ))}
@@ -712,24 +709,26 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                         type="checkbox"
                         checked={selectedFiles.includes(file.file_id)}
                         onChange={e => {
-                          if (e.target.checked) setSelectedFiles([...selectedFiles, file.file_id]);
-                          else setSelectedFiles(selectedFiles.filter(id => id !== file.file_id));
+                          if (e.target.checked)
+                            setSelectedFiles([...selectedFiles, file.file_id]);
+                          else
+                            setSelectedFiles(selectedFiles.filter(id => id !== file.file_id));
                         }}
                         className="w-4 h-4 text-blue-600 rounded"
                       />
                     </div>
                   )}
-                  
+
                   <div className="flex flex-col items-center text-center">
                     <div className="p-3 bg-green-100 rounded-lg mb-3 group-hover:bg-green-200 transition-colors">
-                      <File className="w-8 h-8 text-green-600" />
+                      <Image src="/file.svg" alt="File" width={32} height={32} />
                     </div>
                     <h3 className="font-medium text-gray-900 text-sm truncate w-full" title={file.file_name}>
                       {file.file_name}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">File</p>
                   </div>
-                  
+
                   {!editMode && (
                     <div className="mt-4 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
@@ -760,9 +759,9 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
               </div>
             ))}
           </div>
@@ -788,22 +787,22 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                       />
                     )}
                     <div className="p-2 bg-blue-100 rounded-lg">
-                      <Folder className="w-6 h-6 text-blue-600" />
+                      <Image src="/folder.svg" alt="Folder" width={24} height={24} />
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">{folder.folder_name}</h3>
                       <p className="text-sm text-gray-500">Folder</p>
                     </div>
                   </div>
-                  
-            {!editMode && (
+
+                  {!editMode && (
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setRenameTarget({
-                      type: "folder",
-                      id: folder.folder_id,
-                      name: folder.folder_name,
-                      parent_id: folder.parent_id,
+                          type: "folder",
+                          id: folder.folder_id,
+                          name: folder.folder_name,
+                          parent_id: folder.parent_id,
                         })}
                         className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Rename"
@@ -833,14 +832,14 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                       </button>
                       <Link href={`/folder/${folder.folder_id}`}>
                         <button className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                          <Folder className="w-4 h-4" />
+                          <Image src="/folder.svg" alt="Open" width={16} height={16} />
                         </button>
                       </Link>
-              </div>
-            )}
+                    </div>
+                  )}
                 </div>
-          </div>
-        ))}
+              </div>
+            ))}
 
             {/* Files List */}
             {filteredFiles.map(file => (
@@ -848,26 +847,28 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                 <div className="flex items-center justify-between p-4">
                   <div className="flex items-center gap-4">
                     {editMode && (
-                <input
-                  type="checkbox"
-                  checked={selectedFiles.includes(file.file_id)}
-                  onChange={e => {
-                    if (e.target.checked) setSelectedFiles([...selectedFiles, file.file_id]);
-                    else setSelectedFiles(selectedFiles.filter(id => id !== file.file_id));
-                  }}
+                      <input
+                        type="checkbox"
+                        checked={selectedFiles.includes(file.file_id)}
+                        onChange={e => {
+                          if (e.target.checked)
+                            setSelectedFiles([...selectedFiles, file.file_id]);
+                          else
+                            setSelectedFiles(selectedFiles.filter(id => id !== file.file_id));
+                        }}
                         className="w-4 h-4 text-blue-600 rounded"
                       />
                     )}
                     <div className="p-2 bg-green-100 rounded-lg">
-                      <File className="w-6 h-6 text-green-600" />
+                      <Image src="/file.svg" alt="File" width={24} height={24} />
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">{file.file_name}</h3>
                       <p className="text-sm text-gray-500">File</p>
                     </div>
-            </div>
-                  
-            {!editMode && (
+                  </div>
+
+                  {!editMode && (
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setRenameTarget({ type: "file", id: file.file_id, name: file.file_name })}
@@ -897,11 +898,11 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
                       >
                         <Settings className="w-4 h-4" />
                       </button>
-              </div>
-            )}
+                    </div>
+                  )}
                 </div>
-          </div>
-        ))}
+              </div>
+            ))}
           </div>
         )}
 
@@ -909,13 +910,13 @@ const handleFolderDownload = async (folderId, folderName = "folder.zip") => {
         {filteredFiles.length === 0 && filteredFolders.length === 0 && (
           <div className="text-center py-12">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Folder className="w-8 h-8 text-gray-400" />
+              <Image src="/folder.svg" alt="Empty" width={32} height={32} />
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               {searchQuery ? 'No results found' : 'This folder is empty'}
             </h3>
             <p className="text-gray-500 mb-6">
-              {searchQuery 
+              {searchQuery
                 ? `No files or folders match "${searchQuery}"`
                 : 'Upload files or create folders to get started'
               }

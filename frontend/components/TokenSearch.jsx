@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, X, File, Folder, Download, Share2 } from 'lucide-react';
+import { Search, X, Download, Share2 } from 'lucide-react';
 import axios from 'axios';
+import Image from 'next/image';
 
 export default function TokenSearch({ isOpen, onClose, token }) {
   const [searchToken, setSearchToken] = useState('');
@@ -199,7 +200,7 @@ export default function TokenSearch({ isOpen, onClose, token }) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="p-3 bg-blue-100 rounded-lg">
-                        <Folder className="w-6 h-6 text-blue-600" />
+                        <Image src="/folder.svg" alt="Folder" width={24} height={24} />
                       </div>
                       <div>
                         <h3 className="text-lg font-medium text-gray-900">{folder.folder_name}</h3>
@@ -223,7 +224,7 @@ export default function TokenSearch({ isOpen, onClose, token }) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="p-3 bg-green-100 rounded-lg">
-                        <File className="w-6 h-6 text-green-600" />
+                        <Image src="/file.svg" alt="File" width={24} height={24} />
                       </div>
                       <div>
                         <h3 className="text-lg font-medium text-gray-900">{file.file_name}</h3>

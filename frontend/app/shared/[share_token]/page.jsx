@@ -4,7 +4,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAppContext } from '@/context/context';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import { Folder, File, Download, Pencil, Share2, Trash2 } from 'lucide-react';
+import { Download, Pencil, Share2, Trash2 } from 'lucide-react';
+import Image from 'next/image';
 
 const streamSaver = dynamic(() => import('streamsaver'), { ssr: false });
 
@@ -375,7 +376,7 @@ export default function SharedViewPage() {
                     <div key={folder.folder_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer" onClick={() => openFolder(folder)}>
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-blue-100 rounded-lg">
-                          <Folder className="w-6 h-6 text-blue-600" />
+                          <Image src="/folder.svg" alt="Folder" width={24} height={24} />
                         </div>
                         <div className="flex-1">
                           <div className="font-medium text-gray-900 truncate" title={folder.folder_name}>{folder.folder_name}</div>
@@ -420,7 +421,7 @@ export default function SharedViewPage() {
                     <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-green-100 rounded-lg">
-                          <File className="w-6 h-6 text-green-600" />
+                          <Image src="/file.svg" alt="File" width={24} height={24} />
                         </div>
                         <div className="flex-1">
                           <div className="font-medium text-gray-900 truncate" title={file.file_name}>{file.file_name}</div>

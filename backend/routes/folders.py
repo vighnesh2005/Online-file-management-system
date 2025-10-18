@@ -286,7 +286,7 @@ def delete_folder(db, folder_ids, user_id,file_ids):
         )
         db.commit()
 
-    return {"message": "Folder deleted successfully" , "folders":folders , "files":files}
+    return {"message": "Folder deleted successfully" , "folders":folder_ids , "files":file_ids}
 
 
 @router.post('/bulk_delete')

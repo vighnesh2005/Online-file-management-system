@@ -3,8 +3,6 @@ import { useAppContext } from "@/context/context";
 import { useEffect, useState } from "react";
 import axios from "axios";
 import {
-  Folder,
-  File,
   Download,
   Trash2,
   ArchiveRestore,
@@ -17,6 +15,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 
 const RecycleBin = () => {
   const [files, setFiles] = useState([]);
@@ -296,7 +295,7 @@ const handleDownload = async (file_id, file_name) => {
                   
                   <div className="flex flex-col items-center text-center">
                     <div className="p-3 bg-red-100 rounded-lg mb-3 group-hover:bg-red-200 transition-colors">
-                      <File className="w-8 h-8 text-red-600" />
+                      <Image src="/file.svg" alt="File" width={32} height={32} />
                     </div>
                     <h3 className="font-medium text-gray-900 text-sm truncate w-full" title={file.file_name}>
                       {file.file_name}
@@ -349,7 +348,7 @@ const handleDownload = async (file_id, file_name) => {
                       />
                     )}
                     <div className="p-2 bg-red-100 rounded-lg">
-                      <File className="w-6 h-6 text-red-600" />
+                      <Image src="/file.svg" alt="File" width={24} height={24} />
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">{file.file_name}</h3>
