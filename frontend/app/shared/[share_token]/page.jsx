@@ -69,6 +69,38 @@ export default function SharedViewPage() {
       }
     };
 
+  const crumbs = (() => {
+    const base = [...navStack];
+    if (currentFolderId && currentFolderName) {
+      base.push({ id: currentFolderId, name: currentFolderName });
+    }
+    return base;
+  })();
+
+  const navigateToCrumb = async (index) => {
+    const localCrumbs = (() => {
+      const base = [...navStack];
+      if (currentFolderId && currentFolderName) base.push({ id: currentFolderId, name: currentFolderName });
+      return base;
+    })();
+    if (index < 0 || index >= localCrumbs.length) return;
+    const target = localCrumbs[index];
+    try {
+      const newStack = localCrumbs.slice(0, index); // ancestors before target
+      setNavStack(newStack);
+      setCurrentFolderId(target.id);
+      setCurrentFolderName(target.name);
+      const children = await axios.get(
+        `http://127.0.0.1:8000/folders/get_all_children/${target.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSharedFiles(children.data.files || []);
+      setSharedFolders(children.data.folders || []);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Unable to navigate');
+    }
+  };
+
     init();
   }, [hydrated, token, isLoggedIn, router, share_token]);
 
@@ -260,6 +292,37 @@ export default function SharedViewPage() {
 
   if (!isLoggedIn || !hydrated) return null;
 
+  // Compute breadcrumbs close to render to avoid scope/timing issues
+  const shareCrumbs = (() => {
+    const base = [...navStack];
+    if (currentFolderId && currentFolderName) {
+      base.push({ id: currentFolderId, name: currentFolderName });
+    }
+    return base;
+  })();
+
+  // Local handler to navigate to a breadcrumb index
+  const onCrumbClick = async (index) => {
+    if (index < 0 || index >= shareCrumbs.length) return;
+    // Do nothing if clicking the last (current) crumb
+    if (index === shareCrumbs.length - 1) return;
+    const target = shareCrumbs[index];
+    try {
+      const newStack = shareCrumbs.slice(0, index);
+      setNavStack(newStack);
+      setCurrentFolderId(target.id);
+      setCurrentFolderName(target.name);
+      const children = await axios.get(
+        `http://127.0.0.1:8000/folders/get_all_children/${target.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSharedFiles(children.data.files || []);
+      setSharedFolders(children.data.folders || []);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Unable to navigate');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white shadow-sm border-b">
@@ -276,7 +339,21 @@ export default function SharedViewPage() {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {currentFolderId && (
-          <div className="mb-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              {shareCrumbs.map((c, idx) => (
+                <span key={`${c.id}-${idx}`} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className={`hover:underline ${idx === shareCrumbs.length - 1 ? 'font-semibold text-gray-900 hover:no-underline' : ''}`}
+                    onClick={() => onCrumbClick(idx)}
+                  >
+                    {c.name}
+                  </button>
+                  {idx < shareCrumbs.length - 1 && <span className="text-gray-400">/</span>}
+                </span>
+              ))}
+            </div>
             <button onClick={goBack} disabled={navStack.length === 0} className={`px-3 py-1 text-sm border rounded ${navStack.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
               Back
             </button>
@@ -307,21 +384,21 @@ export default function SharedViewPage() {
                       </div>
                       <div className="mt-3 flex gap-2">
                         <button
-                          onClick={() => setRenameTarget({ type: 'folder', id: folder.folder_id, name: folder.folder_name, parent_id: folder.parent_id })}
+                          onClick={(e) => { e.stopPropagation(); setRenameTarget({ type: 'folder', id: folder.folder_id, name: folder.folder_name, parent_id: folder.parent_id }); }}
                           className="px-2 py-1 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded"
                           title="Rename"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDownloadFolder(folder.folder_id, `${folder.folder_name}.zip`)}
+                          onClick={(e) => { e.stopPropagation(); handleDownloadFolder(folder.folder_id, `${folder.folder_name}.zip`); }}
                           className="px-2 py-1 text-sm text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
                           title="Download"
                         >
                           <Download className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete([folder.folder_id], [])}
+                          onClick={(e) => { e.stopPropagation(); handleDelete([folder.folder_id], []); }}
                           className="px-2 py-1 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded"
                           title="Delete"
                         >
