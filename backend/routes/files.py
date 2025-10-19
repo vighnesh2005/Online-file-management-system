@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends,HTTPException,Form,File,UploadFile
-from utils import get_db,check_permission
+from utils import get_db,check_permission, log_action_for_owner
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
@@ -92,6 +92,13 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
         "file_id": result[0]
     }).fetchone()
 
+    # Log upload action (attribute to file owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="upload", resource_type="file", resource_id=result[0], details=file.filename)
+        db.commit()
+    except Exception:
+        pass
+
     return {"message": "File uploaded successfully","file": dict(new_file._mapping)}
 
 @router.get('/download_file/{file_id}')
@@ -126,6 +133,13 @@ def download_file(
     headers = {
         "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}"
     }
+
+    # Log download action (attribute to file owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="download", resource_type="file", resource_id=file_id, details=file.file_name)
+        db.commit()
+    except Exception:
+        pass
 
     return FileResponse(
         path=file_path,
@@ -194,6 +208,13 @@ def rename_file(db: Session = Depends(get_db) , current_user = Depends(get_curre
     })
 
     db.commit()
+
+    # Log file rename (attribute to file owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="rename_file", resource_type="file", resource_id=file_id, details=file_name)
+        db.commit()
+    except Exception:
+        pass
 
     return {"file_id": file_id}
 
@@ -285,6 +306,13 @@ def replace_file(
 
     updated_file = db.execute(text('SELECT * FROM files WHERE file_id = :file_id'),
                               {"file_id": file_id}).fetchone()
+
+    # Log file replace (attribute to file owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="replace_file", resource_type="file", resource_id=file_id, details=file.filename)
+        db.commit()
+    except Exception:
+        pass
 
     return {
         "message": "File replaced successfully",

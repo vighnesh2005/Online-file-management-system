@@ -74,7 +74,21 @@ queries = [
         FOREIGN KEY (user_id) REFERENCES users(user_id),
         PRIMARY KEY (share_id, user_id)
     )
-    '''
+    ''',
+    # Activity logs table
+    """
+    CREATE TABLE IF NOT EXISTS activity_logs (
+        log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        action VARCHAR(50) NOT NULL,
+        resource_type VARCHAR(50),
+        resource_id INTEGER,
+        details TEXT,
+        ip_address VARCHAR(45),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+    )
+    """
 ]
 
 def create_tables():

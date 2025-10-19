@@ -1,10 +1,10 @@
 # app.py
 from fastapi import FastAPI
 from database import engine, create_tables
-from routes import auth , folders , files, recycle , shares
+from routes import auth , folders , files, recycle , shares, logs
 from fastapi.middleware.cors import CORSMiddleware
 from schedular import start_cleanup_scheduler
- 
+
 from sqlalchemy import text
 
 app = FastAPI(title="FileSystemAuthAPI")
@@ -22,6 +22,7 @@ app.include_router(prefix="/folders", router=folders.router)
 app.include_router(prefix="/files", router=files.router)
 app.include_router(prefix="/recycle", router=recycle.router)
 app.include_router(prefix='/shares',router=shares.router)
+app.include_router(prefix='/logs', router=logs.router)
 
 app.on_event("startup")(start_cleanup_scheduler)
 

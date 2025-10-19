@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Body, HTTPException, status
 from pydantics import UserOut, TokenOut, LoginIn, SignupIn 
 from database import engine, create_tables
-from utils import hash_password, verify_password, create_access_token
+from utils import hash_password, verify_password, create_access_token, log_action
 from sqlalchemy import text
 from db_helpers import create_user, get_user_by_username
 from verify_token import get_current_user 
@@ -27,6 +27,13 @@ async def signup(data: SignupIn):
         # fetch the created user to return
         created = conn.execute(text("SELECT user_id, username, email, profile, storage FROM users WHERE username = :username"),
                                {"username": data.username}).fetchone()
+
+        # log signup
+        try:
+            log_action(conn, user_id=created.user_id, action="signup", resource_type="user", resource_id=created.user_id)
+            conn.commit()
+        except Exception:
+            pass
         return {
             "user_id": created.user_id,
             "username": created.username,
@@ -54,6 +61,12 @@ async def login(data: OAuth2PasswordRequestForm = Depends()):
             raise HTTPException(status_code=401, detail="Incorrect username or password")
 
         token = create_access_token({"user_id": user.user_id, "username": user.username})
+        # log login
+        try:
+            log_action(conn, user_id=user.user_id, action="login", resource_type="user", resource_id=user.user_id)
+            conn.commit()
+        except Exception:
+            pass
         return {"access_token": token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserOut)

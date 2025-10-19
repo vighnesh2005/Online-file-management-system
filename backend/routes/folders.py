@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends,HTTPException,Form
-from utils import get_db,check_permission
+from utils import get_db,check_permission, log_action_for_owner
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
@@ -58,6 +58,12 @@ def create_folder(db: Session = Depends(get_db), current_user: dict = Depends(ge
 
     if not new_folder:
         raise HTTPException(status_code=400, detail="Failed to create folder")
+    # Log folder create (attribute to folder owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="create_folder", resource_type="folder", resource_id=new_folder.folder_id, details=folder_name)
+        db.commit()
+    except Exception:
+        pass
 
     return {"message": "Folder created successfully", "folder": dict(new_folder._mapping)}
 
@@ -121,6 +127,12 @@ def folder_rename(db: Session = Depends(get_db), current_user: dict = Depends(ge
 
     if not result:
         raise HTTPException(status_code=400, detail="Failed to rename folder")
+    # Log folder rename (attribute to folder owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="rename_folder", resource_type="folder", resource_id=folder_id, details=folder_name)
+        db.commit()
+    except Exception:
+        pass
 
     return {"message": "Folder renamed successfully", "folder_id": folder_id, "folder_name": folder_name}
 
@@ -222,6 +234,18 @@ def folder_move(
         'parent_id': parent_id
     }).fetchall()
 
+    # Log moves (attribute to resource owners)
+    try:
+        if folder_ids:
+            for fid in folder_ids:
+                log_action_for_owner(db, actor_user_id=user_id, action="move_folder", resource_type="folder", resource_id=fid, details=f"to={parent_id}")
+        if file_ids:
+            for fid in file_ids:
+                log_action_for_owner(db, actor_user_id=user_id, action="move_file", resource_type="file", resource_id=fid, details=f"to={parent_id}")
+        db.commit()
+    except Exception:
+        pass
+
     return {
         "message": "moved successfully",
         "folders": [dict(r._mapping) for r in new_folders],
@@ -303,6 +327,17 @@ def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_cur
         if check_permission(db,user_id,file_id=i,operation='edit'): files.append(i)
     
     message = delete_folder(db, folders, user_id,files)
+    # Log bulk delete (attribute to resource owners)
+    try:
+        if folders:
+            for fid in folders:
+                log_action_for_owner(db, actor_user_id=user_id, action="delete_folder", resource_type="folder", resource_id=fid)
+        if files:
+            for fid in files:
+                log_action_for_owner(db, actor_user_id=user_id, action="delete_file", resource_type="file", resource_id=fid)
+        db.commit()
+    except Exception:
+        pass
     return message
 
 @router.get('/get_all_children/{folder_id}')
@@ -431,6 +466,12 @@ def download_folder(
         add_folder_to_zip(zip_file, folder_id, db, parent_path=f"{folder_name}/")
 
     zip_buffer.seek(0)
+    # Log folder download (attribute to folder owner)
+    try:
+        log_action_for_owner(db, actor_user_id=user_id, action="download_folder", resource_type="folder", resource_id=folder_id)
+        db.commit()
+    except Exception:
+        pass
 
     return StreamingResponse(
         zip_buffer,

@@ -145,5 +145,63 @@ def check_permission(db, user_id: int, folder_id: int = None, file_id: int = Non
         return False
 
 
-        
-        
+def log_action(db, user_id: int, action: str, resource_type: str = None, resource_id: int = None, details: str = None, ip_address: str = None):
+    """Insert a log entry into activity_logs.
+    Expects an open DB connection from get_db().
+    """
+    db.execute(text(
+        """
+        INSERT INTO activity_logs (user_id, action, resource_type, resource_id, details, ip_address, created_at)
+        VALUES (:user_id, :action, :resource_type, :resource_id, :details, :ip_address, :created_at)
+        """
+    ), {
+        "user_id": user_id,
+        "action": action,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "details": details,
+        "ip_address": ip_address,
+        "created_at": datetime.now()
+    })
+
+def get_owner_user_id(db, resource_type: str, resource_id: int) -> int | None:
+    """Return owner user_id for a given resource (file/folder)."""
+    if resource_type == "file":
+        row = db.execute(text("SELECT user_id FROM files WHERE file_id = :id"), {"id": resource_id}).fetchone()
+        return row.user_id if row else None
+    if resource_type == "folder":
+        row = db.execute(text("SELECT user_id FROM folders WHERE folder_id = :id"), {"id": resource_id}).fetchone()
+        return row.user_id if row else None
+    return None
+
+def log_action_for_owner(
+    db,
+    actor_user_id: int,
+    action: str,
+    resource_type: str,
+    resource_id: int,
+    details: str | None = None,
+    ip_address: str | None = None,
+):
+    """Resolve resource owner and store the log under owner's user_id.
+    The actor is appended to details for auditing.
+    """
+    owner_user_id = get_owner_user_id(db, resource_type, resource_id)
+    # Fallback: if owner not found, attribute to actor
+    target_user_id = owner_user_id if owner_user_id is not None else actor_user_id
+    # Fetch actor email for better audit visibility
+    actor_email_row = db.execute(text("SELECT email FROM users WHERE user_id = :uid"), {"uid": actor_user_id}).fetchone()
+    actor_email = actor_email_row.email if actor_email_row else None
+    extra = f" | actor_id={actor_user_id}"
+    if actor_email:
+        extra += f" actor_email={actor_email}"
+    detail_text = (details or "") + extra
+    log_action(
+        db,
+        user_id=target_user_id,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        details=detail_text,
+        ip_address=ip_address,
+    )

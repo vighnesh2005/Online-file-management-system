@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends,HTTPException,Form,File,UploadFile
-from utils import get_db
+from utils import get_db, log_action_for_owner
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
@@ -46,6 +46,14 @@ def restore(db: Session = Depends(get_db) , current_user = Depends(get_current_u
     })    
 
     db.commit()
+    # Log restore action (attribute to file owners)
+    try:
+        if file_ids:
+            for fid in file_ids:
+                log_action_for_owner(db, actor_user_id=user_id, action="restore_file", resource_type="file", resource_id=fid)
+            db.commit()
+    except Exception:
+        pass
 
     return {'message':'Files restored successfully'}
 
@@ -95,6 +103,14 @@ def permanent_delete(db: Session = Depends(get_db) , current_user = Depends(get_
         raise HTTPException(status_code=400, detail="Error deleting files")
     
     db.commit()
+    # Log permanent delete (attribute to file owners)
+    try:
+        if file_ids:
+            for fid in file_ids:
+                log_action_for_owner(db, actor_user_id=user_id, action="permanent_delete", resource_type="file", resource_id=fid)
+            db.commit()
+    except Exception:
+        pass
 
     return {'message':'Files permanently deleted successfully'}
 

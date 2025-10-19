@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends,HTTPException,Form,File,UploadFile
-from utils import get_db,check_permission
+from utils import get_db,check_permission, log_action_for_owner
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
 from datetime import datetime
@@ -71,6 +71,15 @@ def share(db: Session = Depends(get_db) , current_user = Depends(get_current_use
             })
 
     db.commit()
+    # Log share creation (attribute to resource owner)
+    try:
+        rtype = 'file' if file_id else 'folder'
+        rid = file_id if file_id else folder_id
+        detail = f"permission={permission} is_public={is_public} emails={','.join(emails) if emails else ''} token={token}"
+        log_action_for_owner(db, actor_user_id=user_id, action="create_share", resource_type=rtype, resource_id=rid, details=detail)
+        db.commit()
+    except Exception:
+        pass
 
     return {
         'message':'Item shared successfully',
@@ -217,6 +226,15 @@ def update_shares(db: Session = Depends(get_db), current_user: dict = Depends(ge
             '''), {"share_id": share_id, "user_id": user.user_id})
         
     db.commit()
+    # Log share update (attribute to resource owner)
+    try:
+        rtype = 'file' if share.file_id else 'folder'
+        rid = share.file_id if share.file_id else share.folder_id
+        detail = f"permission={permission} is_public={is_public} emails={','.join(emails) if emails else ''}"
+        log_action_for_owner(db, actor_user_id=user_id, action="update_share", resource_type=rtype, resource_id=rid, details=detail)
+        db.commit()
+    except Exception:
+        pass
     return {"message": "Share updated successfully"}
     
 @router.delete('/delete_share')
@@ -256,4 +274,12 @@ def delete_share(db: Session = Depends(get_db), current_user: dict = Depends(get
     })
 
     db.commit()
+    # Log share delete (attribute to resource owner)
+    try:
+        rtype = 'file' if share.file_id else 'folder'
+        rid = share.file_id if share.file_id else share.folder_id
+        log_action_for_owner(db, actor_user_id=user_id, action="delete_share", resource_type=rtype, resource_id=rid)
+        db.commit()
+    except Exception:
+        pass
     return {"message": "Share deleted successfully"}

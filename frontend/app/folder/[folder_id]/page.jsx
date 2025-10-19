@@ -542,6 +542,14 @@ export default function Home() {
                 </button>
               </Link>
 
+              {/* Logs Button */}
+              <Link href="/logs">
+                <button className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors">
+                  <List className="w-4 h-4" />
+                  Logs
+                </button>
+              </Link>
+
               {/* View Mode Toggle */}
               <div className="flex border border-gray-300 rounded-lg">
                 <button
