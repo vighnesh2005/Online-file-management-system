@@ -4,7 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAppContext } from '@/context/context';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import { Download, Pencil, Share2, Trash2, Plus, Upload, RefreshCw } from 'lucide-react';
+import { Download, Pencil, Share2, Trash2, Plus, Upload, RefreshCw, Search } from 'lucide-react';
 import Image from 'next/image';
 
 const streamSaver = dynamic(() => import('streamsaver'), { ssr: false });
@@ -28,6 +28,7 @@ export default function SharedViewPage() {
   const [newFolderName, setNewFolderName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [replacingId, setReplacingId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (!hydrated) return;
@@ -76,6 +77,9 @@ export default function SharedViewPage() {
 
     init();
   }, [hydrated, token, isLoggedIn, router, share_token]);
+
+  const filteredFolders = sharedFolders.filter(f => f.folder_name?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredFiles = sharedFiles.filter(f => f.file_name?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const handleReplace = async (fileId, fileObj) => {
     if (!fileObj) return;
@@ -431,6 +435,18 @@ export default function SharedViewPage() {
               ))}
             </div>
             <div className="flex items-center gap-2">
+              <div className="hidden sm:block">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-2 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e)=>setSearchQuery(e.target.value)}
+                    placeholder="Search..."
+                    className="pl-7 pr-3 py-1 text-sm border rounded w-48"
+                  />
+                </div>
+              </div>
               <button
                 onClick={() => setNewFolderOpen(true)}
                 className="px-3 py-1 text-sm border rounded hover:bg-gray-50 flex items-center gap-1"
@@ -455,11 +471,11 @@ export default function SharedViewPage() {
         {!loading && !error && (
           <>
             {/* Folders */}
-            {sharedFolders.length > 0 && (
+            {filteredFolders.length > 0 && (
               <div className="mb-6">
                 <h2 className="text-sm font-semibold text-gray-700 mb-2">Folders</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {sharedFolders.map(folder => (
+                  {filteredFolders.map(folder => (
                     <div key={folder.folder_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 p-4 cursor-pointer" onClick={() => openFolder(folder)}>
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-blue-100 rounded-lg">
@@ -500,11 +516,11 @@ export default function SharedViewPage() {
             )}
 
             {/* Files */}
-            {sharedFiles.length > 0 && (
+            {filteredFiles.length > 0 && (
               <div>
                 <h2 className="text-sm font-semibold text-gray-700 mb-2">Files</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {sharedFiles.map(file => (
+                  {filteredFiles.map(file => (
                     <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-green-100 rounded-lg">
@@ -554,8 +570,8 @@ export default function SharedViewPage() {
               </div>
             )}
 
-            {sharedFiles.length === 0 && sharedFolders.length === 0 && (
-              <div className="text-center text-gray-600">No content available for this share.</div>
+            {(filteredFiles.length === 0 && filteredFolders.length === 0) && (
+              <div className="text-center text-gray-600">{searchQuery ? 'No items match your search.' : 'No content available for this share.'}</div>
             )}
           </>
         )}
