@@ -3,7 +3,7 @@ import { useAppContext } from "@/context/context";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
-import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle } from "lucide-react";
+import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -54,6 +54,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState("grid"); // grid or list
   const [showTokenSearch, setShowTokenSearch] = useState(false);
+  const [replacingId, setReplacingId] = useState(null);
 
   // Breadcrumbs
   const [breadcrumbs, setBreadcrumbs] = useState([]); // [{id, name}]
@@ -105,6 +106,36 @@ export default function Home() {
           return chain;
         };
 
+  // ===== Replace File =====
+  const handleReplace = async (fileId, fileObj) => {
+    if (!fileObj) return;
+    try {
+      setReplacingId(fileId);
+      const form = new FormData();
+      form.append('file_id', fileId);
+      form.append('file', fileObj);
+      const res = await axios.put('http://127.0.0.1:8000/files/replace_file', form, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const updated = res.data?.file;
+      if (updated) {
+        setFilesLocal(prev => prev.map(f => (f.file_id === fileId ? updated : f)));
+      } else {
+        // fallback refresh
+        const fileRes = await axios.get(
+          `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setFilesLocal(fileRes.data.files || []);
+        setFoldersLocal(fileRes.data.folders || []);
+      }
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to replace file');
+    } finally {
+      setReplacingId(null);
+    }
+  };
+
         const crumbs = await buildCrumbs(folder_id);
         setBreadcrumbs(crumbs);
       } catch (err) {
@@ -116,6 +147,36 @@ export default function Home() {
 
     fetchData();
   }, [hydrated, token, isLoggedIn, folder_id, router, setUser]);
+
+  // ===== Replace File (component scope) =====
+  const handleReplace = async (fileId, fileObj) => {
+    if (!fileObj) return;
+    try {
+      setReplacingId(fileId);
+      const form = new FormData();
+      form.append('file_id', fileId);
+      form.append('file', fileObj);
+      const res = await axios.put('http://127.0.0.1:8000/files/replace_file', form, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const updated = res.data?.file;
+      if (updated) {
+        setFilesLocal(prev => prev.map(f => (f.file_id === fileId ? updated : f)));
+      } else {
+        // fallback refresh
+        const fileRes = await axios.get(
+          `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setFilesLocal(fileRes.data.files || []);
+        setFoldersLocal(fileRes.data.folders || []);
+      }
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to replace file');
+    } finally {
+      setReplacingId(null);
+    }
+  };
 
   // ===== Rename =====
   const renameFile = async (fileId, rename) => {
@@ -738,6 +799,15 @@ export default function Home() {
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
+                      <label className={`p-2 text-gray-600 border rounded-lg ${replacingId===file.file_id ? 'opacity-60' : 'hover:bg-gray-50'} cursor-pointer transition-colors`} title="Replace">
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e)=>{ const f=e.target.files?.[0]; if(f){ handleReplace(file.file_id, f);} e.target.value=''; }}
+                          disabled={replacingId===file.file_id}
+                        />
+                        <RefreshCw className="w-4 h-4" />
+                      </label>
                       <button
                         onClick={() => handleDownload(file.file_id, file.file_name)}
                         className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"

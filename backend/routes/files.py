@@ -196,3 +196,97 @@ def rename_file(db: Session = Depends(get_db) , current_user = Depends(get_curre
     db.commit()
 
     return {"file_id": file_id}
+
+@router.put('/replace_file')
+def replace_file(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+    file_id: int = Form(...),
+    file: UploadFile = File(...)
+):
+    user_id = current_user['user_id']
+
+    # --- Check permission ---
+    perm = check_permission(db, user_id, file_id=file_id, operation='edit')
+    if not perm:
+        raise HTTPException(status_code=403, detail="You don't have permission to edit this file")
+
+    # --- Fetch old file record ---
+    old_file = db.execute(text('''
+        SELECT file_id, file_name, file_path, file_size, user_id
+        FROM files WHERE file_id = :file_id
+    '''), {"file_id": file_id}).fetchone()
+
+    if not old_file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    old_file = dict(old_file._mapping)
+    USER_DIR = os.path.join(UPLOAD_DIR, f'user_{old_file["user_id"]}')
+    os.makedirs(USER_DIR, exist_ok=True)
+
+    # Paths
+    temp_new_path = os.path.join(USER_DIR, f'temp_{file_id}_{file.filename}')
+    final_new_path = os.path.join(USER_DIR, f'{file_id}_{file.filename}')
+
+    # ---  Write new file to TEMP location ---
+    try:
+        with open(temp_new_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
+
+    new_file_size = os.path.getsize(temp_new_path)
+
+    # ---  Start transactional logic ---
+    try:
+        # a. Update DB record
+        db.execute(text('''
+            UPDATE files 
+            SET file_name = :file_name,
+                file_path = :file_path,
+                file_size = :file_size,
+                updated_at = :updated_at
+            WHERE file_id = :file_id
+        '''), {
+            "file_id": file_id,
+            "file_name": file.filename,
+            "file_path": final_new_path,
+            "file_size": new_file_size,
+            "updated_at": datetime.now()
+        })
+
+        # b. Adjust user storage
+        size_diff = new_file_size - old_file["file_size"]
+        db.execute(text('''
+            UPDATE users SET storage = storage + :diff WHERE user_id = :user_id
+        '''), {
+            "diff": size_diff,
+            "user_id": user_id
+        })
+
+        # --- Commit DB transaction ---
+        db.commit()
+
+        # Move temp → final (atomic rename)
+        os.replace(temp_new_path, final_new_path)
+
+        # Delete old file AFTER successful commit
+        if os.path.exists(old_file["file_path"]):
+            try:
+                os.remove(old_file["file_path"])
+            except Exception as e:
+                print(f"Warning: could not delete old file -> {e}")
+
+    except Exception as e:
+        db.rollback()
+        if os.path.exists(temp_new_path):
+            os.remove(temp_new_path)
+        raise HTTPException(status_code=500, detail=f"Replace failed: {str(e)}")
+
+    updated_file = db.execute(text('SELECT * FROM files WHERE file_id = :file_id'),
+                              {"file_id": file_id}).fetchone()
+
+    return {
+        "message": "File replaced successfully",
+        "file": dict(updated_file._mapping)
+    }

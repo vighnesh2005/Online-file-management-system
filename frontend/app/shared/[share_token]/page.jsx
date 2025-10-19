@@ -4,7 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAppContext } from '@/context/context';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import { Download, Pencil, Share2, Trash2 } from 'lucide-react';
+import { Download, Pencil, Share2, Trash2, Plus, Upload, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 
 const streamSaver = dynamic(() => import('streamsaver'), { ssr: false });
@@ -24,6 +24,10 @@ export default function SharedViewPage() {
 
   // Rename state
   const [renameTarget, setRenameTarget] = useState(null);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [replacingId, setReplacingId] = useState(null);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -70,6 +74,80 @@ export default function SharedViewPage() {
       }
     };
 
+    init();
+  }, [hydrated, token, isLoggedIn, router, share_token]);
+
+  const handleReplace = async (fileId, fileObj) => {
+    if (!fileObj) return;
+    try {
+      setReplacingId(fileId);
+      const form = new FormData();
+      form.append('file_id', fileId);
+      form.append('file', fileObj);
+      const res = await axios.put('http://127.0.0.1:8000/files/replace_file', form, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const updated = res.data?.file;
+      if (updated) {
+        setSharedFiles(prev => prev.map(f => (f.file_id === fileId ? updated : f)));
+      } else {
+        await refreshChildren(currentFolderId);
+      }
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to replace file');
+    } finally {
+      setReplacingId(null);
+    }
+  };
+
+  const refreshChildren = async (folderId) => {
+    const id = folderId ?? currentFolderId;
+    if (!id) return;
+    const children = await axios.get(
+      `http://127.0.0.1:8000/folders/get_all_children/${id}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    setSharedFiles(children.data.files || []);
+    setSharedFolders(children.data.folders || []);
+  };
+
+  const handleCreateFolder = async () => {
+    try {
+      if (!newFolderName?.trim() || !currentFolderId) return;
+      const form = new FormData();
+      form.append('folder_name', newFolderName.trim());
+      form.append('parent_id', currentFolderId);
+      await axios.post('http://127.0.0.1:8000/folders/create_folder', form, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setNewFolderOpen(false);
+      setNewFolderName('');
+      await refreshChildren(currentFolderId);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to create folder');
+    }
+  };
+
+  const handleUploadFile = async (evt) => {
+    const file = evt.target.files?.[0];
+    if (!file || !currentFolderId) return;
+    try {
+      setUploading(true);
+      const form = new FormData();
+      form.append('file', file);
+      form.append('parent_id', currentFolderId);
+      await axios.post('http://127.0.0.1:8000/files/upload_file', form, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await refreshChildren(currentFolderId);
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to upload file');
+    } finally {
+      setUploading(false);
+      evt.target.value = '';
+    }
+  };
+
   const crumbs = (() => {
     const base = [...navStack];
     if (currentFolderId && currentFolderName) {
@@ -101,9 +179,6 @@ export default function SharedViewPage() {
       alert(e.response?.data?.detail || 'Unable to navigate');
     }
   };
-
-    init();
-  }, [hydrated, token, isLoggedIn, router, share_token]);
 
   const openFolder = async (folder) => {
     try {
@@ -341,12 +416,12 @@ export default function SharedViewPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {currentFolderId && (
           <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-gray-700">
+            <div className="flex items-center gap-2 text-sm text-gray-700 overflow-x-auto">
               {shareCrumbs.map((c, idx) => (
                 <span key={`${c.id}-${idx}`} className="flex items-center gap-2">
                   <button
                     type="button"
-                    className={`hover:underline ${idx === shareCrumbs.length - 1 ? 'font-semibold text-gray-900 hover:no-underline' : ''}`}
+                    className={`hover:underline max-w-[160px] truncate ${idx === shareCrumbs.length - 1 ? 'font-semibold text-gray-900 hover:no-underline' : ''}`}
                     onClick={() => onCrumbClick(idx)}
                   >
                     {c.name}
@@ -355,9 +430,21 @@ export default function SharedViewPage() {
                 </span>
               ))}
             </div>
-            <button onClick={goBack} disabled={navStack.length === 0} className={`px-3 py-1 text-sm border rounded ${navStack.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
-              Back
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setNewFolderOpen(true)}
+                className="px-3 py-1 text-sm border rounded hover:bg-gray-50 flex items-center gap-1"
+              >
+                <Plus className="w-4 h-4" /> New Folder
+              </button>
+              <label className={`px-3 py-1 text-sm border rounded ${uploading ? 'opacity-60' : 'hover:bg-gray-50'} flex items-center gap-1 cursor-pointer`}>
+                <Upload className="w-4 h-4" /> Upload
+                <input type="file" className="hidden" onChange={handleUploadFile} disabled={uploading} />
+              </label>
+              <button onClick={goBack} disabled={navStack.length === 0} className={`px-3 py-1 text-sm border rounded ${navStack.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}>
+                Back
+              </button>
+            </div>
           </div>
         )}
         {loading && <div className="text-gray-600">Loading...</div>}
@@ -378,7 +465,7 @@ export default function SharedViewPage() {
                         <div className="p-2 bg-blue-100 rounded-lg">
                           <Image src="/folder.svg" alt="Folder" width={24} height={24} />
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 truncate" title={folder.folder_name}>{folder.folder_name}</div>
                           <div className="text-xs text-gray-500">Folder</div>
                         </div>
@@ -423,7 +510,7 @@ export default function SharedViewPage() {
                         <div className="p-2 bg-green-100 rounded-lg">
                           <Image src="/file.svg" alt="File" width={24} height={24} />
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <div className="font-medium text-gray-900 truncate" title={file.file_name}>{file.file_name}</div>
                           <div className="text-xs text-gray-500">File</div>
                         </div>
@@ -436,6 +523,16 @@ export default function SharedViewPage() {
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
+                        <label className={`px-2 py-1 text-sm border rounded ${replacingId===file.file_id ? 'opacity-60' : 'hover:bg-gray-50'} flex items-center gap-1 cursor-pointer`}
+                               title="Replace">
+                          <input
+                            type="file"
+                            className="hidden"
+                            onChange={(e)=>{ const f=e.target.files?.[0]; if(f){ handleReplace(file.file_id, f);} e.target.value=''; }}
+                            disabled={replacingId===file.file_id}
+                          />
+                          <RefreshCw className="w-4 h-4" />
+                        </label>
                         <button
                           onClick={() => handleDownloadFile(file.file_id, file.file_name)}
                           className="px-2 py-1 text-sm text-gray-600 hover:text-green-600 hover:bg-green-50 rounded"
@@ -478,6 +575,26 @@ export default function SharedViewPage() {
             <div className="flex justify-end gap-2">
               <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => setRenameTarget(null)}>Cancel</button>
               <button className="px-4 py-2 bg-primary text-white rounded" onClick={handleRenameSubmit}>Submit</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Folder Popup */}
+      {newFolderOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-md shadow-md w-80">
+            <h2 className="text-lg font-semibold mb-4">Create new folder</h2>
+            <input
+              type="text"
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded mb-4"
+              placeholder="Folder name"
+            />
+            <div className="flex justify-end gap-2">
+              <button className="px-4 py-2 bg-gray-200 rounded" onClick={() => { setNewFolderOpen(false); setNewFolderName(''); }}>Cancel</button>
+              <button className="px-4 py-2 bg-primary text-white rounded" onClick={handleCreateFolder}>Create</button>
             </div>
           </div>
         </div>
