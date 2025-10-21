@@ -485,7 +485,7 @@ export default function Home() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-4">
               {/* Breadcrumbs */}
-              <nav className="flex items-center gap-2 text-sm text-gray-700">
+              <nav className="flex items-center gap-2 text-lg text-gray-700">
                 {breadcrumbs.map((c, idx) => (
                   <span key={c.id} className="flex items-center gap-2">
                     <button
@@ -691,7 +691,7 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {/* Folders Grid */}
             {filteredFolders.map(folder => (
-              <div key={folder.folder_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div key={folder.folder_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-black transition-shadow">
                 <div className="p-4">
                   {editMode && (
                     <div className="mb-2">
@@ -709,7 +709,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  <div className="flex flex-col items-center text-center">
+                  <div className="flex flex-col items-center text-center ">
                     <div className="p-3 bg-blue-100 rounded-lg mb-3 group-hover:bg-blue-200 transition-colors">
                       <Image src="/folder.svg" alt="Folder" width={32} height={32} />
                     </div>
@@ -770,7 +770,7 @@ export default function Home() {
 
             {/* Files Grid */}
             {filteredFiles.map(file => (
-              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-black transition-shadow">
                 <div className="p-4">
                   {editMode && (
                     <div className="mb-2">
@@ -848,7 +848,7 @@ export default function Home() {
           <div className="space-y-2">
             {/* Folders List */}
             {filteredFolders.map(folder => (
-              <div key={folder.folder_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div key={folder.folder_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-black transition-shadow">
                 <div className="flex items-center justify-between p-4">
                   <div className="flex items-center gap-4">
                     {editMode && (
@@ -921,7 +921,7 @@ export default function Home() {
 
             {/* Files List */}
             {filteredFiles.map(file => (
-              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-black transition-shadow">
                 <div className="flex items-center justify-between p-4">
                   <div className="flex items-center gap-4">
                     {editMode && (

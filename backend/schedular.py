@@ -46,7 +46,7 @@ def delete_old_recycle_bin_files():
             else:
                 print(f"File missing on disk: {file_path}")
 
-            db.execute(text('''
+            db.execute(text(''' 
                 UPDATE users
                 SET storage = MAX(storage - :size, 0)
                 WHERE user_id = :user_id

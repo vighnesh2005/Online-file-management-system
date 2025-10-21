@@ -280,7 +280,7 @@ const handleDownload = async (file_id, file_name) => {
         {viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {filteredFiles.map(file => (
-              <div key={file.file_id} className="group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+              <div key={file.file_id} className="hover:border-black  group bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
                 <div className="p-4">
                   {selectMode && (
                     <div className="mb-2">
