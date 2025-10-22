@@ -1,6 +1,6 @@
 'use client';
 import { useAppContext } from "@/context/context";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
 import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw } from "lucide-react";
@@ -32,6 +32,9 @@ export default function Home() {
 
   const [filesLocal, setFilesLocal] = useState([]);
   const [foldersLocal, setFoldersLocal] = useState([]);
+  // Cached children for local fallback filtering when server search is unavailable
+  const [baseFiles, setBaseFiles] = useState([]);
+  const [baseFolders, setBaseFolders] = useState([]);
   const [renameTarget, setRenameTarget] = useState(null);
 
   // local selection state
@@ -52,9 +55,96 @@ export default function Home() {
   const [showManageModal, setShowManageModal] = useState(false);
   const [manageTarget, setManageTarget] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [viewMode, setViewMode] = useState("grid"); // grid or list
   const [showTokenSearch, setShowTokenSearch] = useState(false);
   const [replacingId, setReplacingId] = useState(null);
+
+  // Immediate search runner (used on Enter)
+  const runSearchNow = async () => {
+    if (!hydrated || !token || !isLoggedIn) return;
+    try {
+      setSearchError("");
+      setSearchLoading(true);
+      if (!searchQuery.trim()) {
+        const fileRes = await axios.get(
+          `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const filesArr = fileRes.data.files || [];
+        const foldersArr = fileRes.data.folders || [];
+        setFilesLocal(filesArr);
+        setFoldersLocal(foldersArr);
+        setBaseFiles(filesArr);
+        setBaseFolders(foldersArr);
+        return;
+      }
+      const res = await axios.get("http://127.0.0.1:8000/search/items", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { q: searchQuery.trim() },
+      });
+      setFilesLocal(res.data?.files || []);
+      setFoldersLocal(res.data?.folders || []);
+    } catch (e) {
+      console.log(e);
+      setSearchError(e?.response?.data?.detail || "Search failed – showing local results");
+      const q = searchQuery.trim().toLowerCase();
+      const ff = baseFiles.filter(f => (f.file_name || "").toLowerCase().includes(q));
+      const fld = baseFolders.filter(f => (f.folder_name || "").toLowerCase().includes(q));
+      setFilesLocal(ff);
+      setFoldersLocal(fld);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Dynamic server-side search within current folder (debounced)
+  useEffect(() => {
+    if (!hydrated || !token || !isLoggedIn) return;
+
+    const handler = setTimeout(async () => {
+      try {
+        setSearchError("");
+        setSearchLoading(true);
+        if (!searchQuery.trim()) {
+          // Reload normal folder children when search is cleared
+          const fileRes = await axios.get(
+            `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          const filesArr = fileRes.data.files || [];
+          const foldersArr = fileRes.data.folders || [];
+          setFilesLocal(filesArr);
+          setFoldersLocal(foldersArr);
+          setBaseFiles(filesArr);
+          setBaseFolders(foldersArr);
+          return;
+        }
+
+        // Query backend search scoped to this folder
+        const res = await axios.get("http://127.0.0.1:8000/search/items", {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { q: searchQuery.trim() },
+        });
+        setFilesLocal(res.data?.files || []);
+        setFoldersLocal(res.data?.folders || []);
+      } catch (e) {
+        console.log(e);
+        setSearchError(e?.response?.data?.detail || "Search failed – showing local results");
+        // Fallback: do client-side filtering over cached children
+        const q = searchQuery.trim().toLowerCase();
+        const ff = baseFiles.filter(f => (f.file_name || "").toLowerCase().includes(q));
+        const fld = baseFolders.filter(f => (f.folder_name || "").toLowerCase().includes(q));
+        setFilesLocal(ff);
+        setFoldersLocal(fld);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(handler);
+  }, [searchQuery, folder_id, hydrated, token, isLoggedIn]);
 
   // Breadcrumbs
   const [breadcrumbs, setBreadcrumbs] = useState([]); // [{id, name}]
@@ -79,8 +169,12 @@ export default function Home() {
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
-        setFilesLocal(fileRes.data.files || []);
-        setFoldersLocal(fileRes.data.folders || []);
+        const initFiles = fileRes.data.files || [];
+        const initFolders = fileRes.data.folders || [];
+        setFilesLocal(initFiles);
+        setFoldersLocal(initFolders);
+        setBaseFiles(initFiles);
+        setBaseFolders(initFolders);
 
         // Build breadcrumbs up to root
         const buildCrumbs = async (id) => {
@@ -469,12 +563,9 @@ export default function Home() {
 
 
   // Filter items based on search
-  const filteredFiles = filesLocal.filter(file =>
-    file.file_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const filteredFolders = foldersLocal.filter(folder =>
-    folder.folder_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Server-driven results (no extra client filtering)
+  const filteredFiles = filesLocal;
+  const filteredFolders = foldersLocal;
 
   // ===== Render =====
   return (
@@ -521,8 +612,17 @@ export default function Home() {
                   placeholder="Search files and folders..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      runSearchNow();
+                    }
+                  }}
+                  className="pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
                 />
+                {searchLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                )}
               </div>
 
               {/* Token Search Button */}
@@ -685,6 +785,15 @@ export default function Home() {
         </div>
       )}
 
+      {/* Search Error Banner */}
+      {searchError && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-3">
+          <div className="p-3 border border-red-300 bg-red-50 text-red-700 text-sm">
+            {searchError}
+          </div>
+        </div>
+      )}
+
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {viewMode === "grid" ? (
@@ -716,7 +825,7 @@ export default function Home() {
                     <h3 className="font-medium text-gray-900 text-sm truncate w-full" title={folder.folder_name}>
                       {folder.folder_name}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1">Folder</p>
+                    <p className="text-xs text-gray-500 mt-1 truncate">{searchQuery ? (folder.path || 'Folder') : 'Folder'}</p>
                   </div>
 
                   {!editMode && (
@@ -795,7 +904,7 @@ export default function Home() {
                     <h3 className="font-medium text-gray-900 text-sm truncate w-full" title={file.file_name}>
                       {file.file_name}
                     </h3>
-                    <p className="text-xs text-gray-500 mt-1">File</p>
+                    <p className="text-xs text-gray-500 mt-1 truncate">{searchQuery ? (file.path || 'File') : 'File'}</p>
                   </div>
 
                   {!editMode && (
@@ -869,7 +978,7 @@ export default function Home() {
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">{folder.folder_name}</h3>
-                      <p className="text-sm text-gray-500">Folder</p>
+                      <p className="text-sm text-gray-500 truncate">{searchQuery ? (folder.path || 'Folder') : 'Folder'}</p>
                     </div>
                   </div>
 
@@ -942,7 +1051,7 @@ export default function Home() {
                     </div>
                     <div>
                       <h3 className="font-medium text-gray-900">{file.file_name}</h3>
-                      <p className="text-sm text-gray-500">File</p>
+                      <p className="text-sm text-gray-500 truncate">{searchQuery ? (file.path || 'File') : 'File'}</p>
                     </div>
                   </div>
 
