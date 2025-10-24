@@ -4,7 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useAppContext } from '@/context/context';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import { Download, Pencil, Share2, Trash2, Plus, Upload, RefreshCw, Search } from 'lucide-react';
+import { Download, Pencil, Share2, Trash2, Plus, Upload, RefreshCw, Search, Eye } from 'lucide-react';
 import Image from 'next/image';
 
 const streamSaver = dynamic(() => import('streamsaver'), { ssr: false });
@@ -531,7 +531,14 @@ export default function SharedViewPage() {
                           <div className="text-xs text-gray-500">File</div>
                         </div>
                       </div>
-                      <div className="mt-3 flex gap-2">
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => router.push(`/view/${file.file_id}`)}
+                          className="px-2 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded"
+                          title="Preview"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setRenameTarget({ type: 'file', id: file.file_id, name: file.file_name })}
                           className="px-2 py-1 text-sm text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded"

@@ -3,13 +3,14 @@ import { useAppContext } from "@/context/context";
 import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import axios from "axios";
-import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw } from "lucide-react";
+import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw, Eye } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import ShareModal from "@/components/ShareModal";
 import TokenSearch from "@/components/TokenSearch";
 import ShareManageModal from "@/components/ShareManageModal";
+import FilePreviewModal from "@/components/drive/FilePreviewModal";
 const streamSaver = dynamic(() => import("streamsaver"), { ssr: false });
 
 export default function Home() {
@@ -60,6 +61,8 @@ export default function Home() {
   const [viewMode, setViewMode] = useState("grid"); // grid or list
   const [showTokenSearch, setShowTokenSearch] = useState(false);
   const [replacingId, setReplacingId] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState(null);
 
   // Immediate search runner (used on Enter)
   const runSearchNow = async () => {
@@ -829,7 +832,7 @@ export default function Home() {
                   </div>
 
                   {!editMode && (
-                    <div className="mt-4 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-4 flex flex-wrap justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setRenameTarget({
                           type: "folder",
@@ -908,7 +911,14 @@ export default function Home() {
                   </div>
 
                   {!editMode && (
-                    <div className="mt-4 flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-4 flex flex-wrap justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => router.push(`/view/${file.file_id}`)}
+                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Preview"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => setRenameTarget({ type: "file", id: file.file_id, name: file.file_name })}
                         className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -983,7 +993,7 @@ export default function Home() {
                   </div>
 
                   {!editMode && (
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex flex-wrap items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => setRenameTarget({
                           type: "folder",
@@ -1056,7 +1066,14 @@ export default function Home() {
                   </div>
 
                   {!editMode && (
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex flex-wrap items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => router.push(`/view/${file.file_id}`)}
+                        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Preview"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => setRenameTarget({ type: "file", id: file.file_id, name: file.file_name })}
                         className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -1210,6 +1227,14 @@ export default function Home() {
         isOpen={showTokenSearch}
         onClose={() => setShowTokenSearch(false)}
         token={token}
+      />
+
+      <FilePreviewModal
+        open={previewOpen}
+        onOpenChange={(v) => { if(!v){ setPreviewOpen(false); setPreviewFile(null);} else { setPreviewOpen(true);} }}
+        file={previewFile}
+        onDownload={(f) => f && handleDownload(f.file_id, f.file_name)}
+        onShare={(f) => f && handleShare({ file_id: f.file_id, file_name: f.file_name })}
       />
     </div>
   );
