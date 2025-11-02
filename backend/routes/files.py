@@ -13,6 +13,7 @@ router = APIRouter()
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+STORAGE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024
 
 @router.post('/upload_file')
 def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get_current_user),file: UploadFile = File(...),parent_id: int = Form(None)):
@@ -25,7 +26,7 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
     
     USER_DIR =os.path.join(UPLOAD_DIR, f'user_{user_id}')
 
-    result = db.execute(text(
+    existing = db.execute(text(
         '''
             SELECT file_name FROM files WHERE file_name = :file_name AND parent_id = :parent_id 
         '''
@@ -34,72 +35,91 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
         'file_name': file.filename,
         'parent_id': parent_id
     }).fetchone()
-    if result :
+    if existing:
         raise HTTPException(status_code=400, detail="File already exists")
-    
 
     os.makedirs(USER_DIR, exist_ok=True)
 
-    
-    result = db.execute(text(
-        '''
-            INSERT INTO FILES (file_name,parent_id,user_id,created_at,updated_at,status) 
-            VALUES(:file_name,:parent_id,:user_id,:created_at,:updated_at,'not_deleted')
-            RETURNING file_id
-        '''
-    ),{
-        "file_name": file.filename,
-        "parent_id": parent_id,
-        "user_id": user_id,
-        "created_at": datetime.now(),
-        "updated_at": datetime.now()
-    }).fetchone()
-
-    file_path = os.path.join(USER_DIR,f'{result[0]}_{file.filename}')
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    file_size = os.path.getsize(file_path)
-
-    db.execute(text(
-        '''
-            UPDATE files SET file_size = :file_size,file_path = :file_path, updated_at = :updated_at 
-            WHERE file_id = :file_id
-        '''
-    ),{
-        "file_id": result[0],
-        "file_size": file_size,
-        "updated_at": datetime.now(),
-        "file_path": file_path
-    })
-
-    db.execute(text(
-        '''
-            UPDATE users SET storage = storage + :file_size WHERE user_id = :user_id 
-        '''
-    ),{
-        "file_size": file_size,
-        "user_id": user_id
-    })
-
-    db.commit()
-    new_file = db.execute(text(
-        '''
-            SELECT * FROM files WHERE file_id = :file_id
-        '''
-    ),{
-        "file_id": result[0]
-    }).fetchone()
-
-    # Log upload action (attribute to file owner)
+    temp_path = os.path.join(USER_DIR, f'temp_{datetime.now().timestamp()}_{file.filename}')
     try:
-        log_action_for_owner(db, actor_user_id=user_id, action="upload", resource_type="file", resource_id=result[0], details=file.filename)
-        db.commit()
-    except Exception:
-        pass
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        file_size = os.path.getsize(temp_path)
 
-    return {"message": "File uploaded successfully","file": dict(new_file._mapping)}
+        current_storage_row = db.execute(text('SELECT storage FROM users WHERE user_id = :user_id'), {"user_id": user_id}).fetchone()
+        current_storage = int(current_storage_row[0]) if current_storage_row else 0
+        if current_storage + file_size > STORAGE_LIMIT_BYTES:
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+            raise HTTPException(status_code=413, detail="Storage limit exceeded (10GB)")
+
+        inserted = db.execute(text(
+            '''
+                INSERT INTO FILES (file_name,parent_id,user_id,created_at,updated_at,status) 
+                VALUES(:file_name,:parent_id,:user_id,:created_at,:updated_at,'not_deleted')
+                RETURNING file_id
+            '''
+        ),{
+            "file_name": file.filename,
+            "parent_id": parent_id,
+            "user_id": user_id,
+            "created_at": datetime.now(),
+            "updated_at": datetime.now()
+        }).fetchone()
+
+        file_id = inserted[0]
+        final_path = os.path.join(USER_DIR,f'{file_id}_{file.filename}')
+        db.execute(text(
+            '''
+                UPDATE files SET file_size = :file_size,file_path = :file_path, updated_at = :updated_at 
+                WHERE file_id = :file_id
+            '''
+        ),{
+            "file_id": file_id,
+            "file_size": file_size,
+            "updated_at": datetime.now(),
+            "file_path": final_path
+        })
+
+        db.execute(text(
+            '''
+                UPDATE users SET storage = storage + :file_size WHERE user_id = :user_id 
+            '''
+        ),{
+            "file_size": file_size,
+            "user_id": user_id
+        })
+
+        db.commit()
+        os.replace(temp_path, final_path)
+
+        new_file = db.execute(text(
+            '''
+                SELECT * FROM files WHERE file_id = :file_id
+            '''
+        ),{
+            "file_id": file_id
+        }).fetchone()
+
+        try:
+            log_action_for_owner(db, actor_user_id=user_id, action="upload", resource_type="file", resource_id=file_id, details=file.filename)
+            db.commit()
+        except Exception:
+            pass
+
+        return {"message": "File uploaded successfully","file": dict(new_file._mapping)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @router.get('/download_file/{file_id}')
 def download_file(
@@ -257,6 +277,16 @@ def replace_file(
         raise HTTPException(status_code=500, detail=f"File upload failed: {str(e)}")
 
     new_file_size = os.path.getsize(temp_new_path)
+
+    current_storage_row = db.execute(text('SELECT storage FROM users WHERE user_id = :user_id'), {"user_id": user_id}).fetchone()
+    current_storage = int(current_storage_row[0]) if current_storage_row else 0
+    projected_total = current_storage - int(old_file["file_size"] or 0) + new_file_size
+    if projected_total > STORAGE_LIMIT_BYTES:
+        try:
+            os.remove(temp_new_path)
+        except Exception:
+            pass
+        raise HTTPException(status_code=413, detail="Storage limit exceeded (10GB)")
 
     # ---  Start transactional logic ---
     try:

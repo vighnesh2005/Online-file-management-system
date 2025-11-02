@@ -13,6 +13,7 @@ const FilePreviewModal = ({ open, onOpenChange, file, onDownload, onDelete, onSh
   const [blobUrl, setBlobUrl] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [docxHtml, setDocxHtml] = useState("")
 
   const ext = useMemo(() => {
     const name = file.file_name || file.name || ""
@@ -44,6 +45,22 @@ const FilePreviewModal = ({ open, onOpenChange, file, onDownload, onDelete, onSh
           throw new Error(err?.detail || err?.message || "Failed to load preview")
         }
         const buf = await res.arrayBuffer()
+
+        // DOCX: render via mammoth
+        if (ext === 'docx') {
+          try {
+            const mammoth = await import('mammoth/mammoth.browser')
+            const result = await mammoth.convertToHtml({ arrayBuffer: buf })
+            if (!revoked) {
+              setDocxHtml(result.value || "")
+            }
+          } catch (e) {
+            throw new Error("DOCX preview requires 'mammoth'. Install it with: npm i mammoth")
+          }
+          return
+        }
+
+        // Default blob preview path
         const blob = new Blob([buf], { type: guessedType })
         const url = URL.createObjectURL(blob)
         if (!revoked) setBlobUrl(url)
@@ -59,6 +76,7 @@ const FilePreviewModal = ({ open, onOpenChange, file, onDownload, onDelete, onSh
       if (blobUrl) URL.revokeObjectURL(blobUrl)
       setBlobUrl(null)
       setError("")
+      setDocxHtml("")
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, file?.file_id])
@@ -68,6 +86,8 @@ const FilePreviewModal = ({ open, onOpenChange, file, onDownload, onDelete, onSh
   const isAudio = guessedType.startsWith("audio/")
   const isPDF = guessedType === "application/pdf"
   const isText = guessedType.startsWith("text/")
+  const isDocx = ext === 'docx'
+  const isPpt = ext === 'ppt' || ext === 'pptx'
 
   const formatFileSize = (bytes) => {
     if (!bytes) return "—"
@@ -108,17 +128,31 @@ const FilePreviewModal = ({ open, onOpenChange, file, onDownload, onDelete, onSh
               <File className="h-10 w-10 mx-auto mb-2 text-muted-foreground" strokeWidth={1} />
               <p className="text-sm text-red-600">{error}</p>
             </div>
-          ) : blobUrl && (
-            isImage ? (
-              <img src={blobUrl} alt={file.file_name || file.name} className="max-w-full max-h-[70vh] object-contain" />
-            ) : isPDF ? (
-              <iframe src={blobUrl} title="PDF preview" className="w-full h-[70vh]" />
-            ) : isVideo ? (
-              <video controls src={blobUrl} className="max-w-full max-h-[70vh]" />
-            ) : isAudio ? (
-              <audio controls src={blobUrl} className="w-full" />
-            ) : isText ? (
-              <iframe src={blobUrl} title="Text preview" className="w-full h-[70vh] bg-white" />
+          ) : (
+            isDocx && docxHtml ? (
+              <div className="prose max-w-full w-full h-[70vh] overflow-auto bg-white p-4" dangerouslySetInnerHTML={{ __html: docxHtml }} />
+            ) : blobUrl ? (
+              isImage ? (
+                <img src={blobUrl} alt={file.file_name || file.name} className="max-w-full max-h-[70vh] object-contain" />
+              ) : isPDF ? (
+                <iframe src={blobUrl} title="PDF preview" className="w-full h-[70vh]" />
+              ) : isVideo ? (
+                <video controls src={blobUrl} className="max-w-full max-h-[70vh]" />
+              ) : isAudio ? (
+                <audio controls src={blobUrl} className="w-full" />
+              ) : isText ? (
+                <iframe src={blobUrl} title="Text preview" className="w-full h-[70vh] bg-white" />
+              ) : isPpt ? (
+                <div className="text-center">
+                  <File className="h-10 w-10 mx-auto mb-2 text-muted-foreground" strokeWidth={1} />
+                  <p className="text-sm text-muted-foreground">PPT/PPTX preview is not enabled yet. I can integrate a client-side viewer or use Office online preview via a public link. Let me know your preference.</p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <File className="h-10 w-10 mx-auto mb-2 text-muted-foreground" strokeWidth={1} />
+                  <p className="text-sm text-muted-foreground">Preview not available for this file type</p>
+                </div>
+              )
             ) : (
               <div className="text-center">
                 <File className="h-10 w-10 mx-auto mb-2 text-muted-foreground" strokeWidth={1} />

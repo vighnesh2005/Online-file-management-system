@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useState, useEffect, useContext } from "react";
+import axios from "axios";
 
 const AppContext = createContext();
 
@@ -11,6 +12,20 @@ export const AppProvider = ({ children }) => {
   const [files , setFiles] = useState([]);
   const [folders , setFolders] = useState([]);
   const [moveMode , setMoveMode] = useState(false);
+
+  const refreshUser = async () => {
+    if (!token) return null;
+    try {
+      const res = await axios.get("http://127.0.0.1:8000/auth/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const u = res.data?.user || res.data;
+      setUser(u);
+      return u;
+    } catch (e) {
+      return null;
+    }
+  };
 
   // Restore from localStorage
   useEffect(() => {
@@ -52,7 +67,8 @@ export const AppProvider = ({ children }) => {
         folders,
         setFolders,
         moveMode,
-        setMoveMode
+        setMoveMode,
+        refreshUser
       }}
     >
       {children}

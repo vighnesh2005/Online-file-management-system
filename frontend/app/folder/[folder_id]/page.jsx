@@ -20,6 +20,7 @@ export default function Home() {
     isLoggedIn,
     hydrated,
     setUser,
+    refreshUser,
     files,
     setFiles,
     folders,
@@ -63,6 +64,22 @@ export default function Home() {
   const [replacingId, setReplacingId] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
+
+  // Helpers
+  const formatBytes = (bytes) => {
+    if (!bytes && bytes !== 0) return "-";
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    if (bytes === 0) return "0 B";
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const val = bytes / Math.pow(1024, i);
+    return `${val.toFixed(i === 0 ? 0 : 1)} ${sizes[i]}`;
+  };
+
+  // Storage computations
+  const TOTAL_LIMIT_BYTES = 10 * 1024 * 1024 * 1024;
+  const usedBytes = user?.storage || 0;
+  const usedPercent = Math.min(100, Math.round((usedBytes / TOTAL_LIMIT_BYTES) * 100));
+  const nearingLimit = usedPercent >= 85;
 
   // Immediate search runner (used on Enter)
   const runSearchNow = async () => {
@@ -162,10 +179,7 @@ export default function Home() {
 
     const fetchData = async () => {
       try {
-        const userRes = await axios.get("http://127.0.0.1:8000/auth/me", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setUser(userRes.data.user || userRes.data);
+        await refreshUser();
 
         const fileRes = await axios.get(
           `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
@@ -259,6 +273,7 @@ export default function Home() {
       const updated = res.data?.file;
       if (updated) {
         setFilesLocal(prev => prev.map(f => (f.file_id === fileId ? updated : f)));
+        await refreshUser();
       } else {
         // fallback refresh
         const fileRes = await axios.get(
@@ -460,6 +475,7 @@ export default function Home() {
       if (res.data.message === "Folder deleted successfully") {
         setFilesLocal(prev => prev.filter(f => !selectedFiles.includes(f.file_id)));
         setFoldersLocal(prev => prev.filter(f => !selectedFolders.includes(f.folder_id)));
+        await refreshUser();
       }
 
       setSelectedFiles([]);
@@ -526,23 +542,38 @@ export default function Home() {
   };
   // ===== CREATE File =====
   const handleCreateFile = async () => {
-    console.log("Creating file:", newFile);
-    const formData = new FormData();
-    formData.append("file", newFile);
-    formData.append("parent_id", folder_id);
+    try {
+      if (!newFile) return;
+      console.log("Creating file:", newFile);
 
-    const res = await axios.post("http://127.0.0.1:8000/files/upload_file", formData, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+      // Client-side pre-check against quota (authoritative check on backend)
+      const projected = (user?.storage || 0) + (newFile?.size || 0);
+      if (projected > TOTAL_LIMIT_BYTES) {
+        alert("Upload blocked: this upload would exceed your 10GB storage limit.");
+        return;
+      }
 
-    alert(res.data.message);
+      const formData = new FormData();
+      formData.append("file", newFile);
+      formData.append("parent_id", folder_id);
 
-    if (res.data.message === "File uploaded successfully") {
-      setFilesLocal(prev => [...prev, res.data.file]);
+      const res = await axios.post("http://127.0.0.1:8000/files/upload_file", formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      alert(res.data.message);
+
+      if (res.data.message === "File uploaded successfully") {
+        setFilesLocal(prev => [...prev, res.data.file]);
+        await refreshUser();
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || "Upload failed";
+      alert(msg);
+    } finally {
+      setShowCreateFilePopup(false);
+      setNewFile(null);
     }
-
-    setShowCreateFilePopup(false);
-    setNewFile(null);
   };
 
   // Share functions
@@ -607,6 +638,16 @@ export default function Home() {
               )}
             </div>
             <div className="flex items-center gap-3">
+              <div className="hidden md:flex flex-col items-end mr-2 min-w-[220px]">
+                <div className="text-sm text-gray-600">{user?.username || user?.email || "User"}</div>
+                <div className="text-xs text-gray-500">{formatBytes(usedBytes)} of {formatBytes(TOTAL_LIMIT_BYTES)} ({usedPercent}%)</div>
+                <div className="mt-1 w-full h-2 bg-gray-200 rounded">
+                  <div
+                    className={`${usedPercent >= 95 ? "bg-red-600" : nearingLimit ? "bg-yellow-500" : "bg-blue-600"} h-2 rounded`}
+                    style={{ width: `${usedPercent}%` }}
+                  />
+                </div>
+              </div>
               {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />

@@ -66,6 +66,23 @@ def permanent_delete(db: Session = Depends(get_db) , current_user = Depends(get_
     if(file_ids is None):
         raise HTTPException(status_code=400, detail="No files selected")
 
+    # Compute total size to decrement from user storage
+    size_query = text(
+        '''
+        SELECT COALESCE(SUM(file_size), 0) FROM files
+        WHERE file_id IN :file_ids AND user_id = :user_id
+        '''
+    ).bindparams(bindparam("file_ids", expanding=True), bindparam("user_id"))
+
+    size_row = db.execute(
+        size_query,
+        {
+            'file_ids': file_ids,
+            'user_id': user_id
+        }
+    ).fetchone()
+    total_size = int(size_row[0]) if size_row else 0
+
     query = text(
         '''
         SELECT file_path FROM files
@@ -96,7 +113,19 @@ def permanent_delete(db: Session = Depends(get_db) , current_user = Depends(get_
         ,{
             'file_ids':file_ids,
             'user_id':user_id
-        })      
+        })
+
+        if total_size > 0:
+            db.execute(text(
+                '''
+                UPDATE users
+                SET storage = CASE WHEN storage >= :dec THEN storage - :dec ELSE 0 END
+                WHERE user_id = :user_id
+                '''
+            ), {
+                'dec': total_size,
+                'user_id': user_id
+            })
 
     except Exception as e:
         db.rollback()
