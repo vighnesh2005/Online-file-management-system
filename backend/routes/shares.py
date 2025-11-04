@@ -283,3 +283,59 @@ def delete_share(db: Session = Depends(get_db), current_user: dict = Depends(get
     except Exception:
         pass
     return {"message": "Share deleted successfully"}
+
+@router.get('/shared_with_me')
+def get_shared_with_me(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Get all files and folders shared with the current user"""
+    user_id = current_user["user_id"]
+    
+    # Get shares where user has explicit access
+    user_shares = db.execute(text('''
+        SELECT s.share_id, s.file_id, s.folder_id, s.token, s.permission, s.is_public,
+               s.created_at, s.updated_at
+        FROM shares s
+        INNER JOIN share_access sa ON s.share_id = sa.share_id
+        WHERE sa.user_id = :user_id
+    '''), {"user_id": user_id}).fetchall()
+    
+    files = []
+    folders = []
+    
+    for share in user_shares:
+        share_dict = dict(share._mapping)
+        
+        if share.file_id:
+            # Get file details
+            file_data = db.execute(text('''
+                SELECT f.file_id, f.file_name, f.file_size, f.created_at, f.updated_at,
+                       u.username as owner_name, u.email as owner_email
+                FROM files f
+                JOIN users u ON f.user_id = u.user_id
+                WHERE f.file_id = :file_id AND f.status != 'deleted'
+            '''), {"file_id": share.file_id}).fetchone()
+            
+            if file_data:
+                file_dict = dict(file_data._mapping)
+                file_dict['share_token'] = share.token
+                file_dict['permission'] = share.permission
+                file_dict['shared_at'] = share.created_at
+                files.append(file_dict)
+        
+        elif share.folder_id:
+            # Get folder details
+            folder_data = db.execute(text('''
+                SELECT f.folder_id, f.folder_name, f.created_at, f.updated_at,
+                       u.username as owner_name, u.email as owner_email
+                FROM folders f
+                JOIN users u ON f.user_id = u.user_id
+                WHERE f.folder_id = :folder_id
+            '''), {"folder_id": share.folder_id}).fetchone()
+            
+            if folder_data:
+                folder_dict = dict(folder_data._mapping)
+                folder_dict['share_token'] = share.token
+                folder_dict['permission'] = share.permission
+                folder_dict['shared_at'] = share.created_at
+                folders.append(folder_dict)
+    
+    return {"files": files, "folders": folders}

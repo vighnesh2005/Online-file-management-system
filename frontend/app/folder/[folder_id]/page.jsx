@@ -9,7 +9,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import ShareModal from "@/components/ShareModal";
 import TokenSearch from "@/components/TokenSearch";
-import ShareManageModal from "@/components/ShareManageModal";
+import ShareDetailsModal from "@/components/ShareDetailsModal";
 import FilePreviewModal from "@/components/drive/FilePreviewModal";
 const streamSaver = dynamic(() => import("streamsaver"), { ssr: false });
 
@@ -64,6 +64,8 @@ export default function Home() {
   const [replacingId, setReplacingId] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
+  const crumbsRef = useRef(null);
+  const [scopedSearch, setScopedSearch] = useState(false);
 
   // Helpers
   const formatBytes = (bytes) => {
@@ -100,9 +102,13 @@ export default function Home() {
         setBaseFolders(foldersArr);
         return;
       }
+      const params = { q: searchQuery.trim() };
+      if (scopedSearch && folder_id) {
+        params.parent_id = folder_id;
+      }
       const res = await axios.get("http://127.0.0.1:8000/search/items", {
         headers: { Authorization: `Bearer ${token}` },
-        params: { q: searchQuery.trim() },
+        params,
       });
       setFilesLocal(res.data?.files || []);
       setFoldersLocal(res.data?.folders || []);
@@ -143,9 +149,13 @@ export default function Home() {
         }
 
         // Query backend search scoped to this folder
+        const params = { q: searchQuery.trim() };
+        if (scopedSearch && folder_id) {
+          params.parent_id = folder_id;
+        }
         const res = await axios.get("http://127.0.0.1:8000/search/items", {
           headers: { Authorization: `Bearer ${token}` },
-          params: { q: searchQuery.trim() },
+          params,
         });
         setFilesLocal(res.data?.files || []);
         setFoldersLocal(res.data?.folders || []);
@@ -168,6 +178,13 @@ export default function Home() {
 
   // Breadcrumbs
   const [breadcrumbs, setBreadcrumbs] = useState([]); // [{id, name}]
+
+  // Make sure last crumb is visible
+  useEffect(() => {
+    if (crumbsRef?.current) {
+      crumbsRef.current.scrollLeft = crumbsRef.current.scrollWidth;
+    }
+  }, [breadcrumbs]);
 
   // ====== Load files/folders ======
   useEffect(() => {
@@ -607,24 +624,64 @@ export default function Home() {
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap py-3">
+            <div className="flex items-center gap-4 min-w-0 flex-1">
               {/* Breadcrumbs */}
-              <nav className="flex items-center gap-2 text-lg text-gray-700">
-                {breadcrumbs.map((c, idx) => (
-                  <span key={c.id} className="flex items-center gap-2">
-                    <button
-                      className={`hover:underline ${idx === breadcrumbs.length - 1 ? 'font-semibold text-gray-900 hover:no-underline' : ''}`}
-                      onClick={() => {
-                        if (idx === breadcrumbs.length - 1) return;
-                        router.push(`/folder/${c.id}`);
-                      }}
-                    >
-                      {c.name}
-                    </button>
-                    {idx < breadcrumbs.length - 1 && <span className="text-gray-400">/</span>}
-                  </span>
-                ))}
+              <nav ref={crumbsRef} className="flex items-center gap-2 text-sm sm:text-base md:text-lg text-gray-700 overflow-x-auto no-scrollbar whitespace-nowrap min-w-0 flex-1">
+                {breadcrumbs.length > 3 ? (
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* First */}
+                    <span className="flex items-center gap-2 min-w-0">
+                      <button
+                        className="hover:underline max-w-[140px] sm:max-w-[200px] truncate"
+                        onClick={() => router.push(`/folder/${breadcrumbs[0].id}`)}
+                        title={breadcrumbs[0].name}
+                      >
+                        {breadcrumbs[0].name}
+                      </button>
+                      <span className="text-gray-400">/</span>
+                    </span>
+                    {/* Ellipsis */}
+                    <span className="px-2 text-gray-500">...</span>
+                    {/* Second last */}
+                    <span className="flex items-center gap-2 min-w-0">
+                      <button
+                        className="hover:underline max-w-[160px] sm:max-w-[220px] truncate"
+                        onClick={() => router.push(`/folder/${breadcrumbs[breadcrumbs.length - 2].id}`)}
+                        title={breadcrumbs[breadcrumbs.length - 2].name}
+                      >
+                        {breadcrumbs[breadcrumbs.length - 2].name}
+                      </button>
+                      <span className="text-gray-400">/</span>
+                    </span>
+                    {/* Last (no truncate) */}
+                    <span className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        className="font-semibold text-gray-900 hover:no-underline whitespace-nowrap"
+                        onClick={() => {}}
+                        title={breadcrumbs[breadcrumbs.length - 1].name}
+                      >
+                        {breadcrumbs[breadcrumbs.length - 1].name}
+                      </button>
+                    </span>
+                  </div>
+                ) : (
+                  breadcrumbs.map((c, idx) => (
+                    <span key={c.id} className="flex items-center gap-2">
+                      <button
+                        className={`hover:underline ${idx === breadcrumbs.length - 1 ? 'font-semibold text-gray-900 hover:no-underline' : ''}`}
+                        onClick={() => {
+                          if (idx === breadcrumbs.length - 1) return;
+                          router.push(`/folder/${c.id}`);
+                        }}
+                        title={c.name}
+                      >
+                        {c.name}
+                      </button>
+                      {idx < breadcrumbs.length - 1 && <span className="text-gray-400">/</span>}
+                    </span>
+                  ))
+                )}
               </nav>
               {moveMode && (
                 <div className="flex items-center gap-3">
@@ -637,8 +694,8 @@ export default function Home() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden md:flex flex-col items-end mr-2 min-w-[220px]">
+            <div className="flex items-center gap-3 justify-end flex-wrap">
+              <div className="hidden lg:flex flex-col items-end mr-2 min-w-[220px]">
                 <div className="text-sm text-gray-600">{user?.username || user?.email || "User"}</div>
                 <div className="text-xs text-gray-500">{formatBytes(usedBytes)} of {formatBytes(TOTAL_LIMIT_BYTES)} ({usedPercent}%)</div>
                 <div className="mt-1 w-full h-2 bg-gray-200 rounded">
@@ -649,24 +706,35 @@ export default function Home() {
                 </div>
               </div>
               {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search files and folders..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      runSearchNow();
-                    }
-                  }}
-                  className="pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
-                />
-                {searchLoading && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                )}
+              <div className="flex flex-col gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search files and folders..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        runSearchNow();
+                      }
+                    }}
+                    className="pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+                  />
+                  {searchLoading && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  )}
+                </div>
+                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={scopedSearch}
+                    onChange={(e) => setScopedSearch(e.target.checked)}
+                    className="w-3 h-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span>Search in current folder only</span>
+                </label>
               </div>
 
               {/* Token Search Button */}
@@ -710,6 +778,19 @@ export default function Home() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Storage (small screens) */}
+      <div className="bg-white border-b md:hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="text-xs text-gray-500">{formatBytes(usedBytes)} of {formatBytes(TOTAL_LIMIT_BYTES)} ({usedPercent}%)</div>
+          <div className="mt-1 w-full h-2 bg-gray-200 rounded">
+            <div
+              className={`${usedPercent >= 95 ? "bg-red-600" : nearingLimit ? "bg-yellow-500" : "bg-blue-600"} h-2 rounded`}
+              style={{ width: `${usedPercent}%` }}
+            />
           </div>
         </div>
       </div>
@@ -1257,12 +1338,16 @@ export default function Home() {
         }}
       />
 
-      <ShareManageModal
-        isOpen={showManageModal}
-        onClose={() => setShowManageModal(false)}
-        item={manageTarget}
-        token={token}
-      />
+      {showManageModal && manageTarget && (
+        <ShareDetailsModal
+          item={manageTarget}
+          token={token}
+          onClose={() => {
+            setShowManageModal(false);
+            setManageTarget(null);
+          }}
+        />
+      )}
 
       <TokenSearch
         isOpen={showTokenSearch}

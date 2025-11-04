@@ -153,3 +153,7 @@
   border-style: solid;
   border-color: var(--border);
 }
+
+/* Hide scrollbar but keep scroll behavior (for breadcrumbs) */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
