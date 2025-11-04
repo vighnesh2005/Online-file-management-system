@@ -6,16 +6,15 @@ import {
   Download,
   Trash2,
   ArchiveRestore,
-  ArrowLeft,
   Search,
   Grid,
   List,
   RotateCcw,
   X
 } from "lucide-react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import DriveLayout from "@/components/common/DriveLayout";
 
 const RecycleBin = () => {
   const [files, setFiles] = useState([]);
@@ -174,60 +173,18 @@ const handleDownload = async (file_id, file_name) => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-4">
-              <Link href="/folder/0">
-                <button className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-              </Link>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Recycle Bin</h1>
-                <p className="text-sm text-gray-500">Deleted files and folders</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search deleted files..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
-                />
-              </div>
-              
-              {/* View Mode Toggle */}
-              <div className="flex border border-gray-300 rounded-lg">
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`p-2 ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                  <Grid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`p-2 ${viewMode === "list" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
+    <DriveLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 mb-2">Recycle Bin</h1>
+          <p className="text-sm sm:text-base text-gray-600">Restore or permanently delete files</p>
         </div>
-      </div>
 
-      {/* Action Bar */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        {/* Action Bar */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
               {!selectMode ? (
                 <button
                   onClick={() => setSelectMode(true)}
@@ -237,46 +194,75 @@ const handleDownload = async (file_id, file_name) => {
                   Select Items
                 </button>
               ) : (
-                <div className="flex items-center gap-3">
+                <>
                   <span className="text-sm text-gray-600">
                     {selectedFiles.length} selected
                   </span>
                   <button
                     onClick={() => handleRestoreFiles(selectedFiles)}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                    disabled={selectedFiles.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <ArchiveRestore className="w-4 h-4" />
-                    Restore Selected
+                    Restore
                   </button>
                   <button
                     onClick={() => handleDelete(selectedFiles)}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    disabled={selectedFiles.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 className="w-4 h-4" />
                     Delete Forever
                   </button>
-                </div>
+                  <button
+                    onClick={() => {
+                      setSelectMode(false);
+                      setSelectedFiles([]);
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Cancel
+                  </button>
+                </>
               )}
             </div>
             
-            {selectMode && (
-              <button
-                onClick={() => {
-                  setSelectMode(false);
-                  setSelectedFiles([]);
-                }}
-                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-              >
-                <X className="w-4 h-4" />
-                Cancel
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-48 sm:w-64"
+                />
+              </div>
+              
+              {/* View Mode Toggle */}
+              <div className="flex border border-gray-300 rounded-lg">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`p-2 ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                  title="Grid view"
+                >
+                  <Grid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-2 ${viewMode === "list" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                  title="List view"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Content */}
         {viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {filteredFiles.map(file => (
@@ -405,7 +391,7 @@ const handleDownload = async (file_id, file_name) => {
           </div>
         )}
       </div>
-    </div>
+    </DriveLayout>
   );
 };
 

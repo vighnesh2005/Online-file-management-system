@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { Download, Eye, Folder, File, User } from "lucide-react";
 import Link from "next/link";
-import Image from "next/image";
-import Navbar from "@/components/common/Navbar";
+import DriveLayout from "@/components/common/DriveLayout";
 
 export default function SharedWithMe() {
   const { user, token, isLoggedIn, hydrated } = useAppContext();
@@ -105,19 +104,19 @@ export default function SharedWithMe() {
 
   if (!hydrated || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading shared items...</p>
+      <DriveLayout>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading shared items...</p>
+          </div>
         </div>
-      </div>
+      </DriveLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-      
+    <DriveLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -295,6 +294,6 @@ export default function SharedWithMe() {
           </div>
         )}
       </div>
-    </div>
+    </DriveLayout>
   );
 }

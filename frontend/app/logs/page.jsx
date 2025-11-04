@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAppContext } from "@/context/context";
-import { Download, Filter, AlertTriangle, ArrowLeft } from "lucide-react";
+import { Download, Filter, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/common/Navbar";
+import DriveLayout from "@/components/common/DriveLayout";
 
 export default function LogsPage() {
   const { token, hydrated } = useAppContext();
@@ -145,9 +145,7 @@ export default function LogsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
-
+    <DriveLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-6">
@@ -461,6 +459,6 @@ export default function LogsPage() {
           </>
         )}
       </div>
-    </div>
+    </DriveLayout>
   );
 }

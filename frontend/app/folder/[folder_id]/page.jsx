@@ -1,7 +1,7 @@
 'use client';
 import { useAppContext } from "@/context/context";
 import { useEffect, useState, useRef } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw, Eye } from "lucide-react";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import ShareModal from "@/components/ShareModal";
 import TokenSearch from "@/components/TokenSearch";
 import ShareDetailsModal from "@/components/ShareDetailsModal";
 import FilePreviewModal from "@/components/drive/FilePreviewModal";
+import DriveLayout from "@/components/common/DriveLayout";
 const streamSaver = dynamic(() => import("streamsaver"), { ssr: false });
 
 export default function Home() {
@@ -31,6 +32,7 @@ export default function Home() {
   } = useAppContext();
   const router = useRouter();
   const { folder_id } = useParams();
+  const searchParams = useSearchParams();
 
   const [filesLocal, setFilesLocal] = useState([]);
   const [foldersLocal, setFoldersLocal] = useState([]);
@@ -198,17 +200,40 @@ export default function Home() {
       try {
         await refreshUser();
 
-        const fileRes = await axios.get(
-          `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        // Check if there's a search query in URL
+        const searchQuery = searchParams.get('q');
+        const searchScope = searchParams.get('scope');
 
-        const initFiles = fileRes.data.files || [];
-        const initFolders = fileRes.data.folders || [];
-        setFilesLocal(initFiles);
-        setFoldersLocal(initFolders);
-        setBaseFiles(initFiles);
-        setBaseFolders(initFolders);
+        if (searchQuery) {
+          // Perform search
+          const params = { q: searchQuery };
+          if (searchScope === 'local' && folder_id) {
+            params.parent_id = folder_id;
+          }
+          
+          const searchRes = await axios.get('http://127.0.0.1:8000/search/items', {
+            headers: { Authorization: `Bearer ${token}` },
+            params,
+          });
+          
+          setFilesLocal(searchRes.data?.files || []);
+          setFoldersLocal(searchRes.data?.folders || []);
+          setSearchQuery(searchQuery);
+        } else {
+          // Normal folder view
+          const fileRes = await axios.get(
+            `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          const initFiles = fileRes.data.files || [];
+          const initFolders = fileRes.data.folders || [];
+          setFilesLocal(initFiles);
+          setFoldersLocal(initFolders);
+          setBaseFiles(initFiles);
+          setBaseFolders(initFolders);
+          setSearchQuery('');
+        }
 
         // Build breadcrumbs up to root
         const buildCrumbs = async (id) => {
@@ -234,49 +259,16 @@ export default function Home() {
           return chain;
         };
 
-  // ===== Replace File =====
-  const handleReplace = async (fileId, fileObj) => {
-    if (!fileObj) return;
-    try {
-      setReplacingId(fileId);
-      const form = new FormData();
-      form.append('file_id', fileId);
-      form.append('file', fileObj);
-      const res = await axios.put('http://127.0.0.1:8000/files/replace_file', form, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const updated = res.data?.file;
-      if (updated) {
-        setFilesLocal(prev => prev.map(f => (f.file_id === fileId ? updated : f)));
-      } else {
-        // fallback refresh
-        const fileRes = await axios.get(
-          `http://127.0.0.1:8000/folders/get_all_children/${folder_id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        setFilesLocal(fileRes.data.files || []);
-        setFoldersLocal(fileRes.data.folders || []);
-      }
-    } catch (e) {
-      alert(e.response?.data?.detail || 'Failed to replace file');
-    } finally {
-      setReplacingId(null);
-    }
-  };
-
         const crumbs = await buildCrumbs(folder_id);
         setBreadcrumbs(crumbs);
       } catch (err) {
         console.error(err);
-        localStorage.clear();
-        router.push("/login");
       }
     };
-
     fetchData();
-  }, [hydrated, token, isLoggedIn, folder_id, router, setUser]);
+  }, [folder_id, hydrated, token, isLoggedIn, searchParams]);
 
-  // ===== Replace File (component scope) =====
+  // ===== Replace File =====
   const handleReplace = async (fileId, fileObj) => {
     if (!fileObj) return;
     try {
@@ -620,14 +612,14 @@ export default function Home() {
 
   // ===== Render =====
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4 flex-wrap py-3">
+    <DriveLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Breadcrumbs and Actions Bar */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
             <div className="flex items-center gap-4 min-w-0 flex-1">
               {/* Breadcrumbs */}
-              <nav ref={crumbsRef} className="flex items-center gap-2 text-sm sm:text-base md:text-lg text-gray-700 overflow-x-auto no-scrollbar whitespace-nowrap min-w-0 flex-1">
+              <nav ref={crumbsRef} className="flex items-center gap-2 text-sm text-gray-700 overflow-x-auto no-scrollbar whitespace-nowrap min-w-0 flex-1">
                 {breadcrumbs.length > 3 ? (
                   <div className="flex items-center gap-2 min-w-0">
                     {/* First */}
@@ -683,6 +675,19 @@ export default function Home() {
                   ))
                 )}
               </nav>
+              {searchQuery && (
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                    Search: "{searchQuery}"
+                  </span>
+                  <button
+                    onClick={() => router.push(`/folder/${folder_id}`)}
+                    className="px-3 py-1 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
               {moveMode && (
                 <div className="flex items-center gap-3">
                   <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-medium">
@@ -694,110 +699,29 @@ export default function Home() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-3 justify-end flex-wrap">
-              <div className="hidden lg:flex flex-col items-end mr-2 min-w-[220px]">
-                <div className="text-sm text-gray-600">{user?.username || user?.email || "User"}</div>
-                <div className="text-xs text-gray-500">{formatBytes(usedBytes)} of {formatBytes(TOTAL_LIMIT_BYTES)} ({usedPercent}%)</div>
-                <div className="mt-1 w-full h-2 bg-gray-200 rounded">
-                  <div
-                    className={`${usedPercent >= 95 ? "bg-red-600" : nearingLimit ? "bg-yellow-500" : "bg-blue-600"} h-2 rounded`}
-                    style={{ width: `${usedPercent}%` }}
-                  />
-                </div>
-              </div>
-              {/* Search */}
-              <div className="flex flex-col gap-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Search files and folders..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        runSearchNow();
-                      }
-                    }}
-                    className="pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
-                  />
-                  {searchLoading && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                  )}
-                </div>
-                <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={scopedSearch}
-                    onChange={(e) => setScopedSearch(e.target.checked)}
-                    className="w-3 h-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span>Search in current folder only</span>
-                </label>
-              </div>
-
-              {/* Token Search Button */}
+            
+            {/* View Mode Toggle */}
+            <div className="flex border border-gray-300 rounded-lg">
               <button
-                onClick={() => setShowTokenSearch(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                onClick={() => setViewMode("grid")}
+                className={`p-2 ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                title="Grid view"
               >
-                <Search className="w-4 h-4" />
-                Search Token
+                <Grid className="w-4 h-4" />
               </button>
-
-              {/* Recycle Bin Button */}
-              <Link href="/recyclebin">
-                <button className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors">
-                  <Recycle className="w-4 h-4" />
-                  Recycle Bin
-                </button>
-              </Link>
-
-              {/* Logs Button */}
-              <Link href="/logs">
-                <button className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors">
-                  <List className="w-4 h-4" />
-                  Logs
-                </button>
-              </Link>
-
-              {/* View Mode Toggle */}
-              <div className="flex border border-gray-300 rounded-lg">
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`p-2 ${viewMode === "grid" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                  <Grid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`p-2 ${viewMode === "list" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-2 ${viewMode === "list" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                title="List view"
+              >
+                <List className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Storage (small screens) */}
-      <div className="bg-white border-b md:hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="text-xs text-gray-500">{formatBytes(usedBytes)} of {formatBytes(TOTAL_LIMIT_BYTES)} ({usedPercent}%)</div>
-          <div className="mt-1 w-full h-2 bg-gray-200 rounded">
-            <div
-              className={`${usedPercent >= 95 ? "bg-red-600" : nearingLimit ? "bg-yellow-500" : "bg-blue-600"} h-2 rounded`}
-              style={{ width: `${usedPercent}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Action Bar */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        
+        {/* Action Bar */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {!moveMode ? (
@@ -889,12 +813,10 @@ export default function Home() {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Move Mode Indicator */}
-      {moveMode && (
-        <div className="bg-orange-50 border-b border-orange-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        {/* Move Mode Indicator */}
+        {moveMode && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-orange-100 rounded-lg">
                 <Move className="w-5 h-5 text-orange-600" />
@@ -907,20 +829,16 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Search Error Banner */}
-      {searchError && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-3">
-          <div className="p-3 border border-red-300 bg-red-50 text-red-700 text-sm">
+        {/* Search Error Banner */}
+        {searchError && (
+          <div className="p-3 border border-red-300 bg-red-50 text-red-700 text-sm rounded-lg mb-6">
             {searchError}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Content */}
         {viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {/* Folders Grid */}
@@ -1362,6 +1280,6 @@ export default function Home() {
         onDownload={(f) => f && handleDownload(f.file_id, f.file_name)}
         onShare={(f) => f && handleShare({ file_id: f.file_id, file_name: f.file_name })}
       />
-    </div>
+    </DriveLayout>
   );
 }

@@ -47,8 +47,8 @@ export default function ShareDetailsModal({ item, token, onClose }) {
   };
 
   const copyToClipboard = (token) => {
-    const shareUrl = `${window.location.origin}/shared/${token}`;
-    navigator.clipboard.writeText(shareUrl);
+    // Copy only the token, not the full URL
+    navigator.clipboard.writeText(token);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2000);
   };
@@ -247,12 +247,12 @@ export default function ShareDetailsModal({ item, token, onClose }) {
 
                           <div className="flex items-center gap-2 mb-2">
                             <code className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded text-xs font-mono truncate">
-                              {`${window.location.origin}/shared/${share.token}`}
+                              {share.token}
                             </code>
                             <button
                               onClick={() => copyToClipboard(share.token)}
                               className="p-2 border border-gray-300 rounded hover:bg-gray-50 transition-colors flex-shrink-0"
-                              title="Copy link"
+                              title="Copy token"
                             >
                               {copiedToken === share.token ? (
                                 <Check className="w-4 h-4 text-green-600" strokeWidth={1.5} />

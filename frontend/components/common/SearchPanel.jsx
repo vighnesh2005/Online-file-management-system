@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useAppContext } from "@/context/context";
 import axios from "axios";
 import { Search, X, Folder as FolderIcon, File as FileIcon, Download } from "lucide-react";
+import DriveLayout from "./DriveLayout";
 
 export default function SearchPanel() {
   const router = useRouter();
@@ -110,7 +111,8 @@ export default function SearchPanel() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <DriveLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Search Controls */}
       <form onSubmit={onSubmit} className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
@@ -236,6 +238,7 @@ export default function SearchPanel() {
       {!loading && !error && folders.length === 0 && files.length === 0 && q.trim() && (
         <div className="mt-6 text-sm text-gray-500">No results for "{q}"</div>
       )}
-    </div>
+      </div>
+    </DriveLayout>
   );
 }
