@@ -4,7 +4,7 @@ import { useAppContext } from "@/context/context";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import { Download, Eye, Folder, File, User } from "lucide-react";
+import { Download, Eye, Folder, File, User, Upload, Pencil } from "lucide-react";
 import Link from "next/link";
 import DriveLayout from "@/components/common/DriveLayout";
 
@@ -38,6 +38,58 @@ export default function SharedWithMe() {
         setLoading(false);
       }
     };
+
+  const handleRenameFile = async (file) => {
+    try {
+      if (file.permission !== 'edit') return;
+      const newName = prompt('Enter new file name', file.file_name);
+      if (!newName || newName === file.file_name) return;
+      const formData = new FormData();
+      formData.append('file_id', file.file_id);
+      formData.append('file_name', newName);
+      const res = await axios.put('http://127.0.0.1:8000/files/rename_file', formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 200) {
+        setSharedFiles((prev) => prev.map((f) => f.file_id === file.file_id ? { ...f, file_name: newName } : f));
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to rename file');
+    }
+  };
+
+  const handleReupload = async (file) => {
+    try {
+      if (file.permission !== 'edit') {
+        alert('You do not have permission to reupload this file');
+        return;
+      }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.onchange = async (e) => {
+        const selected = e.target.files?.[0];
+        if (!selected) return;
+        try {
+          const form = new FormData();
+          form.append('file_id', file.file_id);
+          form.append('file', selected);
+          const res = await axios.put('http://127.0.0.1:8000/files/replace_file', form, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const updated = res.data?.file;
+          // Optimistically update list
+          if (updated) {
+            setSharedFiles((prev) => prev.map((f) => f.file_id === file.file_id ? { ...f, file_name: updated.file_name, file_size: updated.file_size, updated_at: updated.updated_at } : f));
+          }
+        } catch (err) {
+          alert(err.response?.data?.detail || 'Failed to reupload file');
+        }
+      };
+      input.click();
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
     fetchSharedItems();
   }, [hydrated, token, isLoggedIn, router]);
@@ -147,7 +199,7 @@ export default function SharedWithMe() {
               {sharedFolders.map((folder) => (
                 <Link
                   key={folder.folder_id}
-                  href={`/folder/${folder.folder_id}`}
+                  href={`/shared/${encodeURIComponent(folder.share_token)}`}
                   className="group bg-white rounded border border-gray-200 hover:border-blue-600 hover:shadow-md transition-all p-4"
                 >
                   <div className="flex items-start gap-3">
@@ -222,13 +274,29 @@ export default function SharedWithMe() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <Link href={`/view/${file.file_id}`}>
-                            <button className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                            <button className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="View">
                               <Eye className="w-4 h-4" strokeWidth={1.5} />
                             </button>
                           </Link>
+                          {file.permission === 'edit' && (
+                            <button 
+                              onClick={() => handleRenameFile(file)}
+                              className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Rename"
+                            >
+                              <Pencil className="w-4 h-4" strokeWidth={1.5} />
+                            </button>
+                          )}
+                          {file.permission === 'edit' && (
+                            <button 
+                              onClick={() => handleReupload(file)}
+                              className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors" title="Reupload"
+                            >
+                              <Upload className="w-4 h-4" strokeWidth={1.5} />
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleDownloadFile(file.file_id, file.file_name)}
-                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded transition-colors" title="Download"
                           >
                             <Download className="w-4 h-4" strokeWidth={1.5} />
                           </button>
@@ -280,6 +348,24 @@ export default function SharedWithMe() {
                         View
                       </button>
                     </Link>
+                    {file.permission === 'edit' && (
+                      <button 
+                        onClick={() => handleRenameFile(file)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-700 rounded hover:bg-blue-600/20 transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" strokeWidth={1.5} />
+                        Rename
+                      </button>
+                    )}
+                    {file.permission === 'edit' && (
+                      <button 
+                        onClick={() => handleReupload(file)}
+                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
+                      >
+                        <Upload className="w-4 h-4" strokeWidth={1.5} />
+                        Reupload
+                      </button>
+                    )}
                     <button 
                       onClick={() => handleDownloadFile(file.file_id, file.file_name)}
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
