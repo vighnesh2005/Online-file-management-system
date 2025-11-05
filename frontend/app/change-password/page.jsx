@@ -61,7 +61,7 @@ export default function ChangePasswordPage() {
       formData.append('old_password', currentPassword);
       formData.append('new_password', newPassword);
 
-      await axios.put('http://127.0.0.1:8000/users/change_password', formData, {
+      await axios.put('http://127.0.0.1:8000/auth/change_password', formData, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

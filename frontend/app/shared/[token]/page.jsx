@@ -219,25 +219,28 @@ export default function SharedTokenPage() {
     try {
       const formData = new FormData();
       if (item.file_id) {
-        formData.append('file_id', item.file_id);
-        await axios.delete('http://127.0.0.1:8000/files/delete_file', {
-          headers: { Authorization: `Bearer ${token}` },
-          data: formData,
-        });
-      } else {
-        formData.append('folder_id', item.folder_id);
-        await axios.delete('http://127.0.0.1:8000/folders/delete_folder', {
-          headers: { Authorization: `Bearer ${token}` },
-          data: formData,
-        });
+        formData.append('file_ids', String(item.file_id));
+      } else if (item.folder_id) {
+        formData.append('folder_ids', String(item.folder_id));
       }
-      
-      // Refresh the data
-      const response = await axios.get(
-        `http://127.0.0.1:8000/shares/get_shares?token=${encodeURIComponent(shareToken)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setSharedData(response.data);
+      await axios.post('http://127.0.0.1:8000/folders/bulk_delete', formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Refresh the view
+      if (currentFolderId) {
+        const res = await axios.get(`http://127.0.0.1:8000/folders/get_all_children/${currentFolderId}`,{ headers: { Authorization: `Bearer ${token}` }});
+        const filesArr = res.data.files || [];
+        const foldersArr = res.data.folders || [];
+        setChildFolders(foldersArr.filter(f => f?.folder_id !== currentFolderId));
+        setChildFiles(filesArr);
+      } else {
+        const response = await axios.get(
+          `http://127.0.0.1:8000/shares/get_shares?token=${encodeURIComponent(shareToken)}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setSharedData(response.data);
+      }
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to delete item');
     }

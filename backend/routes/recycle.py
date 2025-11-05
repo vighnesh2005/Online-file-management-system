@@ -33,7 +33,7 @@ def restore(db: Session = Depends(get_db) , current_user = Depends(get_current_u
     query = text(
         '''
         UPDATE files
-        SET status = 'not_deleted'
+        SET status = 'not_deleted', parent_id = 0
         WHERE file_id IN :file_ids AND user_id = :user_id
         '''
     ).bindparams(bindparam("file_ids", expanding=True), bindparam("user_id"))
