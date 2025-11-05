@@ -8,3 +8,8 @@ python-jose==3.3.0
 email-validator==2.2.0
 apscheduler==3.10.3
 requests==2.32.3
+google-generativeai
+pypdf
+python-docx
+python-pptx
+openpyxl

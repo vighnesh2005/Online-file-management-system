@@ -1,10 +1,19 @@
 from sqlalchemy import create_engine, text
 
-# Database setup (SQLite for example)
+# Database setup
 DATABASE_URL = "sqlite:///online_file_system.db"
 engine = create_engine(DATABASE_URL, echo=True)
+from sqlalchemy import event
 
-# Raw SQL queries for tables
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    try:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+    except Exception:
+        pass
+
 queries = [
 
     # Users table
@@ -29,8 +38,8 @@ queries = [
         user_id INTEGER,
         created_at DATE,
         updated_at DATE,
-        FOREIGN KEY (parent_id) REFERENCES folders(folder_id),
-        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        FOREIGN KEY (parent_id) REFERENCES folders(folder_id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
     )
     """,
 
@@ -46,8 +55,8 @@ queries = [
         updated_at DATE,
         file_size INTEGER,
         status VARCHAR(20) CHECK(status IN ('deleted', 'not_deleted')),
-        FOREIGN KEY (parent_id) REFERENCES folders(folder_id),
-        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        FOREIGN KEY (parent_id) REFERENCES folders(folder_id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
     )
     """,
 
@@ -62,16 +71,17 @@ queries = [
         created_at DATE,
         updated_at DATE,
         is_public BOOLEAN DEFAULT 0,
-        FOREIGN KEY (file_id) REFERENCES files(file_id),
-        FOREIGN KEY (folder_id) REFERENCES folders(folder_id)
+        FOREIGN KEY (file_id) REFERENCES files(file_id) ON DELETE CASCADE,
+        FOREIGN KEY (folder_id) REFERENCES folders(folder_id) ON DELETE CASCADE
     )
     """,
+    # Share access table
     '''
     CREATE TABLE IF NOT EXISTS share_access(
         share_id INTEGER NOT NULL,
         user_id INTEGER NOT NULL,
-        FOREIGN KEY (share_id) REFERENCES shares(share_id),
-        FOREIGN KEY (user_id) REFERENCES users(user_id),
+        FOREIGN KEY (share_id) REFERENCES shares(share_id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
         PRIMARY KEY (share_id, user_id)
     )
     ''',
@@ -86,9 +96,34 @@ queries = [
         details TEXT,
         ip_address VARCHAR(45),
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(user_id)
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
     )
+    """,
+
     """
+    CREATE INDEX IF NOT EXISTS idx_folders_user_id ON folders(user_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_files_user_id ON files(user_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_files_parent_id ON files(parent_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_shares_file_id ON shares(file_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_shares_folder_id ON shares(folder_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id_created_at ON activity_logs(user_id, created_at)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_share_access_user_id ON share_access(user_id)
+    """,
 ]
 
 def create_tables():

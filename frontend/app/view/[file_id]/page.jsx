@@ -20,6 +20,14 @@ export default function FileViewerPage() {
   const [error, setError] = useState("");
   const [textContent, setTextContent] = useState("");
 
+  // AI: summary and Q&A
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiSummary, setAiSummary] = useState("");
+  const [chatQuestion, setChatQuestion] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatAnswer, setChatAnswer] = useState("");
+
   const ext = useMemo(() => {
     const name = meta?.file_name || "";
     const idx = name.lastIndexOf(".");
@@ -69,8 +77,57 @@ export default function FileViewerPage() {
       txt: "plaintext",
       csv: "plaintext",
     };
+
     return map[ext] || "plaintext";
   }, [ext]);
+
+  // --- AI: Fetch summary ---
+  const fetchSummary = async () => {
+    setAiLoading(true);
+    setAiError("");
+    setAiSummary("");
+    try {
+      const form = new FormData();
+      form.append("file_id", String(file_id));
+      const resp = await fetch("http://127.0.0.1:8000/ai/summarize", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.detail || data?.message || "Failed to summarize");
+      setAiSummary(data.summary || "No summary returned.");
+    } catch (e) {
+      setAiError(e?.message || "Summarization failed");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // --- AI: Ask a question ---
+  const askAI = async () => {
+    if (!chatQuestion.trim()) return;
+    setChatLoading(true);
+    setChatAnswer("");
+    try {
+      const form = new FormData();
+      form.append("file_id", String(file_id));
+      form.append("question", chatQuestion);
+      const resp = await fetch("http://127.0.0.1:8000/ai/ask", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.detail || data?.message || "Ask failed");
+      setChatAnswer(data.answer || "No answer.");
+    } catch (e) {
+      setChatAnswer("");
+      alert(e?.message || "Ask failed");
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   // 1) Fetch metadata first
   useEffect(() => {
@@ -273,6 +330,53 @@ export default function FileViewerPage() {
             </div>
           </div>
         )}
+
+        {/* AI Summary */}
+        <div className="bg-white border rounded p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">AI Summary</div>
+            <button
+              onClick={fetchSummary}
+              disabled={aiLoading}
+              className={`px-3 py-1.5 rounded text-white ${aiLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+            >
+              {aiLoading ? 'Summarizing…' : 'Summarize'}
+            </button>
+          </div>
+          <div className="mt-3 text-sm whitespace-pre-wrap">
+            {aiError ? (
+              <span className="text-red-600">{aiError}</span>
+            ) : aiSummary ? (
+              aiSummary
+            ) : (
+              <span className="text-gray-500">Click Summarize to generate a concise summary of this file.</span>
+            )}
+          </div>
+        </div>
+
+        {/* AI Q&A */}
+        <div className="bg-white border rounded p-4">
+          <div className="text-sm font-medium mb-2">Ask about this file</div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={chatQuestion}
+              onChange={(e)=>setChatQuestion(e.target.value)}
+              placeholder="Ask a question…"
+              className="flex-1 border rounded px-3 py-2 text-sm"
+            />
+            <button
+              onClick={askAI}
+              disabled={chatLoading || !chatQuestion.trim()}
+              className={`px-3 py-2 rounded text-white ${chatLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+            >
+              {chatLoading ? 'Asking…' : 'Ask'}
+            </button>
+          </div>
+          {chatAnswer && (
+            <div className="mt-3 text-sm whitespace-pre-wrap border rounded p-3 bg-gray-50">{chatAnswer}</div>
+          )}
+        </div>
 
         {isCode && runnableExt.includes(ext) && (
           <div className="bg-white border rounded p-4 grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -1,7 +1,7 @@
 # app.py
 from fastapi import FastAPI
 from database import engine, create_tables
-from routes import auth , folders , files, recycle , shares, logs, search, execute
+from routes import auth , folders , files, recycle , shares, logs, search, execute, ai
 from fastapi.middleware.cors import CORSMiddleware
 from schedular import start_cleanup_scheduler
 
@@ -25,6 +25,7 @@ app.include_router(prefix='/shares',router=shares.router)
 app.include_router(prefix='/logs', router=logs.router)
 app.include_router(prefix='/search', router=search.router)
 app.include_router(prefix='/execute', router=execute.router)
+app.include_router(prefix='/ai', router=ai.router)
 
 app.on_event("startup")(start_cleanup_scheduler)
 
