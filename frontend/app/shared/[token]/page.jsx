@@ -97,8 +97,11 @@ export default function SharedTokenPage() {
         const res = await axios.get(`http://127.0.0.1:8000/folders/get_all_children/${fid}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setChildFiles(res.data.files || []);
-        setChildFolders(res.data.folders || []);
+        const filesArr = res.data.files || [];
+        const foldersArr = res.data.folders || [];
+        // Defensive: do not show the current folder as a child if backend ever returns it
+        setChildFolders(foldersArr.filter(f => f?.folder_id !== fid));
+        setChildFiles(filesArr);
       } catch (e) {
         console.error(e);
         setError(e.response?.data?.detail || 'Failed to load folder contents');
@@ -454,7 +457,7 @@ export default function SharedTokenPage() {
           </div>
         )}
 
-        {sharedData && (
+        {sharedData && !currentFolderId && (
           <div className="space-y-6">
             {/* Folders */}
             {sharedData.folders && sharedData.folders.length > 0 && (

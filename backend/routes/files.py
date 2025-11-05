@@ -24,16 +24,21 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
     if not perm and parent_id != 0:
         raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
     
+    # Normalize root folder: store NULL in DB instead of 0 to satisfy FK constraints
+    normalized_parent_id = None if parent_id in (0, None) else parent_id
+    
     USER_DIR =os.path.join(UPLOAD_DIR, f'user_{user_id}')
 
     existing = db.execute(text(
         '''
-            SELECT file_name FROM files WHERE file_name = :file_name AND parent_id = :parent_id 
+            SELECT file_name FROM files 
+            WHERE file_name = :file_name 
+              AND ( (:parent_id IS NULL AND parent_id IS NULL) OR parent_id = :parent_id )
         '''
     ),
     {
         'file_name': file.filename,
-        'parent_id': parent_id
+        'parent_id': normalized_parent_id
     }).fetchone()
     if existing:
         raise HTTPException(status_code=400, detail="File already exists")
@@ -63,7 +68,7 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
             '''
         ),{
             "file_name": file.filename,
-            "parent_id": parent_id,
+            "parent_id": normalized_parent_id,
             "user_id": user_id,
             "created_at": datetime.now(),
             "updated_at": datetime.now()
