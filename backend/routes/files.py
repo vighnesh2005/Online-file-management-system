@@ -25,7 +25,7 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
         raise HTTPException(status_code=400, detail="You don't have permission to access this folder")
     
     # Normalize root folder: store NULL in DB instead of 0 to satisfy FK constraints
-    normalized_parent_id = None if parent_id in (0, None) else parent_id
+    normalized_parent_id = 0 if parent_id in (0, None) else parent_id
     
     USER_DIR =os.path.join(UPLOAD_DIR, f'user_{user_id}')
 
