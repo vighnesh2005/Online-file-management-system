@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import DriveLayout from "@/components/common/DriveLayout";
 import { useAppContext } from "@/context/context";
 import { BarChart3, PieChart, FolderTree, ChevronRight, RotateCcw } from "lucide-react";
@@ -24,6 +25,7 @@ function PercentBar({ value, className = "bg-blue-600" }) {
 
 export default function StorageInsightsPage() {
   const { token, hydrated } = useAppContext();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
@@ -93,6 +95,16 @@ export default function StorageInsightsPage() {
   const limitBytes = summary?.limit_bytes || 0;
   const percentUsed = summary?.percent_used || 0;
 
+  const totalCount = useMemo(() => {
+    const list = summary?.by_type || [];
+    return list.reduce((acc, t) => acc + (t.count || 0), 0);
+  }, [summary]);
+
+  const avgFileSize = useMemo(() => {
+    if (!totalUsed || !totalCount) return 0;
+    return Math.round(totalUsed / totalCount);
+  }, [totalUsed, totalCount]);
+
   const topTypes = useMemo(() => {
     const list = summary?.by_type || [];
     return list.slice(0, 6);
@@ -101,6 +113,14 @@ export default function StorageInsightsPage() {
   const topFolders = useMemo(() => {
     const list = summary?.by_folder || [];
     return list.slice(0, 8);
+  }, [summary]);
+
+  const topFolder = useMemo(() => (summary?.by_folder || [])[0] || null, [summary]);
+  const topType = useMemo(() => (summary?.by_type || [])[0] || null, [summary]);
+  const peakMonth = useMemo(() => {
+    const list = summary?.by_month || [];
+    if (list.length === 0) return null;
+    return list.reduce((best, m) => (m.bytes > (best?.bytes || 0) ? m : best), null);
   }, [summary]);
 
   const onEnterFolder = (id, name) => {
@@ -139,6 +159,16 @@ export default function StorageInsightsPage() {
                 <div className="text-sm text-gray-600 mt-2">
                   {formatBytes(totalUsed)} of {formatBytes(limitBytes)} used ({percentUsed}%)
                 </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div>
+                    <div className="text-gray-500">Files</div>
+                    <div className="text-gray-900 font-medium">{totalCount || 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">Avg file size</div>
+                    <div className="text-gray-900 font-medium">{formatBytes(avgFileSize)}</div>
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -164,6 +194,11 @@ export default function StorageInsightsPage() {
                     </div>
                   );
                 })}
+                {topType && (
+                  <div className="text-xs text-gray-600 pt-2">
+                    Largest type: <span className="text-gray-900 font-medium">.{topType.extension}</span> • {formatBytes(topType.bytes)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -183,14 +218,32 @@ export default function StorageInsightsPage() {
                   const pct = totalUsed > 0 ? Math.round((f.bytes / totalUsed) * 100) : 0;
                   return (
                     <div key={`${f.folder_id}-${f.folder_name}`} className="text-sm">
-                      <div className="flex justify-between text-gray-700">
+                      <div className="flex items-center justify-between text-gray-700 gap-2">
                         <span className="truncate mr-2">{f.folder_name}</span>
-                        <span className="text-gray-500">{formatBytes(f.bytes)} • {pct}%</span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-gray-500">{formatBytes(f.bytes)} • {pct}%</span>
+                          <button
+                            disabled={f.folder_id === 0}
+                            onClick={() => router.push(`/folder/${f.folder_id}`)}
+                            className={`px-2 py-1 text-xs border rounded ${f.folder_id === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                          >
+                            Open
+                          </button>
+                        </div>
                       </div>
                       <PercentBar value={pct} className="bg-emerald-600" />
                     </div>
                   );
                 })}
+                {topFolder && (
+                  <div className="text-xs text-gray-600 pt-2">
+                    Heaviest folder: <button
+                      className="text-blue-600 hover:underline"
+                      disabled={topFolder.folder_id === 0}
+                      onClick={() => topFolder.folder_id !== 0 && router.push(`/folder/${topFolder.folder_id}`)}
+                    >{topFolder.folder_name}</button> • {formatBytes(topFolder.bytes)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -228,6 +281,11 @@ export default function StorageInsightsPage() {
                   </div>
                 );
               })}
+              {peakMonth && (
+                <div className="text-xs text-gray-600 pt-2">
+                  Peak month: <span className="text-gray-900 font-medium">{peakMonth.month}</span> • {formatBytes(peakMonth.bytes)}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -284,15 +342,33 @@ export default function StorageInsightsPage() {
                           <PercentBar value={pct} className="bg-teal-600" />
                         </td>
                         <td className="px-4 py-3">
-                          {!isFilesOnly && (
-                            <button
-                              onClick={() => onEnterFolder(c.folder_id, c.folder_name)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
-                            >
-                              <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
-                              Drill down
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {!isFilesOnly && (
+                              <button
+                                onClick={() => onEnterFolder(c.folder_id, c.folder_name)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
+                              >
+                                <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
+                                Drill down
+                              </button>
+                            )}
+                            {!isFilesOnly && (
+                              <button
+                                onClick={() => router.push(`/folder/${c.folder_id}`)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
+                              >
+                                Open
+                              </button>
+                            )}
+                            {isFilesOnly && (
+                              <button
+                                onClick={() => router.push(`/folder/${currentFolder.id}`)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 rounded hover:bg-gray-50"
+                              >
+                                Open
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
