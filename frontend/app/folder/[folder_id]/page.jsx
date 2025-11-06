@@ -3,7 +3,7 @@ import { useAppContext } from "@/context/context";
 import { useEffect, useState, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import axios from "axios";
-import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw, Eye } from "lucide-react";
+import { Download, UserPlus, Pencil, Share2, Settings, Plus, Trash2, Move, Search, Grid, List, Recycle, RefreshCw, Eye, Star } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -68,6 +68,8 @@ export default function Home() {
   const [previewFile, setPreviewFile] = useState(null);
   const crumbsRef = useRef(null);
   const [scopedSearch, setScopedSearch] = useState(false);
+  const [starredFiles, setStarredFiles] = useState(new Set());
+  const [starredFolders, setStarredFolders] = useState(new Set());
 
   // Helpers
   const formatBytes = (bytes) => {
@@ -267,6 +269,70 @@ export default function Home() {
     };
     fetchData();
   }, [folder_id, hydrated, token, isLoggedIn, searchParams]);
+
+  
+
+  const fetchStarred = async () => {
+    if (!hydrated || !token || !isLoggedIn) return;
+    try {
+      const res = await axios.get('http://127.0.0.1:8000/api/starred', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const files = res.data?.files || [];
+      const folders = res.data?.folders || [];
+      setStarredFiles(new Set(files.map(f => f.file_id)));
+      setStarredFolders(new Set(folders.map(f => f.folder_id)));
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    if (!hydrated || !token || !isLoggedIn) return;
+    fetchStarred();
+  }, [hydrated, token, isLoggedIn]);
+
+  const toggleStarFile = async (fileId) => {
+    try {
+      if (starredFiles.has(fileId)) {
+        await axios.delete('http://127.0.0.1:8000/api/star', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { file_id: fileId },
+        });
+        const ns = new Set(starredFiles);
+        ns.delete(fileId);
+        setStarredFiles(ns);
+      } else {
+        await axios.post('http://127.0.0.1:8000/api/star', null, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { file_id: fileId },
+        });
+        const ns = new Set(starredFiles);
+        ns.add(fileId);
+        setStarredFiles(ns);
+      }
+    } catch (e) {}
+  };
+
+  const toggleStarFolder = async (folderId) => {
+    try {
+      if (starredFolders.has(folderId)) {
+        await axios.delete('http://127.0.0.1:8000/api/star', {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { folder_id: folderId },
+        });
+        const ns = new Set(starredFolders);
+        ns.delete(folderId);
+        setStarredFolders(ns);
+      } else {
+        await axios.post('http://127.0.0.1:8000/api/star', null, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { folder_id: folderId },
+        });
+        const ns = new Set(starredFolders);
+        ns.add(folderId);
+        setStarredFolders(ns);
+      }
+    } catch (e) {}
+  };
 
   // ===== Replace File =====
   const handleReplace = async (fileId, fileObj) => {
@@ -838,6 +904,8 @@ export default function Home() {
           </div>
         )}
 
+        
+
         {/* Content */}
         {viewMode === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
@@ -873,6 +941,13 @@ export default function Home() {
 
                   {!editMode && (
                     <div className="mt-4 flex flex-wrap justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => toggleStarFolder(folder.folder_id)}
+                        className={`p-2 rounded-lg transition-colors ${starredFolders.has(folder.folder_id) ? 'text-yellow-600 hover:bg-yellow-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                        title={starredFolders.has(folder.folder_id) ? 'Unstar' : 'Star'}
+                      >
+                        <Star className="w-4 h-4" strokeWidth={1.5} fill={starredFolders.has(folder.folder_id) ? 'currentColor' : 'none'} />
+                      </button>
                       <button
                         onClick={() => setRenameTarget({
                           type: "folder",
@@ -952,6 +1027,13 @@ export default function Home() {
 
                   {!editMode && (
                     <div className="mt-4 flex flex-wrap justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => toggleStarFile(file.file_id)}
+                        className={`p-2 rounded-lg transition-colors ${starredFiles.has(file.file_id) ? 'text-yellow-600 hover:bg-yellow-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                        title={starredFiles.has(file.file_id) ? 'Unstar' : 'Star'}
+                      >
+                        <Star className="w-4 h-4" strokeWidth={1.5} fill={starredFiles.has(file.file_id) ? 'currentColor' : 'none'} />
+                      </button>
                       <button
                         onClick={() => router.push(`/view/${file.file_id}`)}
                         className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1035,6 +1117,13 @@ export default function Home() {
                   {!editMode && (
                     <div className="flex flex-wrap items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
+                        onClick={() => toggleStarFolder(folder.folder_id)}
+                        className={`p-2 rounded-lg transition-colors ${starredFolders.has(folder.folder_id) ? 'text-yellow-600 hover:bg-yellow-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                        title={starredFolders.has(folder.folder_id) ? 'Unstar' : 'Star'}
+                      >
+                        <Star className="w-4 h-4" strokeWidth={1.5} fill={starredFolders.has(folder.folder_id) ? 'currentColor' : 'none'} />
+                      </button>
+                      <button
                         onClick={() => setRenameTarget({
                           type: "folder",
                           id: folder.folder_id,
@@ -1107,6 +1196,13 @@ export default function Home() {
 
                   {!editMode && (
                     <div className="flex flex-wrap items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => toggleStarFile(file.file_id)}
+                        className={`p-2 rounded-lg transition-colors ${starredFiles.has(file.file_id) ? 'text-yellow-600 hover:bg-yellow-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                        title={starredFiles.has(file.file_id) ? 'Unstar' : 'Star'}
+                      >
+                        <Star className="w-4 h-4" strokeWidth={1.5} fill={starredFiles.has(file.file_id) ? 'currentColor' : 'none'} />
+                      </button>
                       <button
                         onClick={() => router.push(`/view/${file.file_id}`)}
                         className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"

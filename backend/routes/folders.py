@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 import zipfile
 from fastapi.responses import StreamingResponse
 from io import BytesIO
+ 
 
 router = APIRouter()
 
@@ -64,6 +65,8 @@ def create_folder(db: Session = Depends(get_db), current_user: dict = Depends(ge
         db.commit()
     except Exception:
         pass
+
+    
 
     return {"message": "Folder created successfully", "folder": dict(new_folder._mapping)}
 
@@ -338,6 +341,7 @@ def folder_delete(db: Session = Depends(get_db) , current_user = Depends(get_cur
         db.commit()
     except Exception:
         pass
+    
     return message
 
 @router.get('/get_all_children/{folder_id}')
@@ -472,6 +476,8 @@ def download_folder(
         db.commit()
     except Exception:
         pass
+
+    
 
     return StreamingResponse(
         zip_buffer,

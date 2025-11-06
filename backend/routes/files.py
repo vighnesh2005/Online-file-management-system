@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends,HTTPException,Form,File,UploadFile
+from fastapi import Query
 from utils import get_db,check_permission, log_action_for_owner
 from verify_token import get_current_user
 from sqlalchemy import text,bindparam
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 import os, shutil
 from fastapi.responses import FileResponse
 from urllib.parse import quote
+ 
 
 
 router = APIRouter()    
@@ -125,6 +127,8 @@ def upload_file(db: Session = Depends(get_db) , current_user: dict = Depends(get
             pass
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    finally:
+        pass
 
 @router.get('/download_file/{file_id}')
 def download_file(
@@ -166,11 +170,14 @@ def download_file(
     except Exception:
         pass
 
+ 
+
     return FileResponse(
         path=file_path,
         media_type="application/octet-stream",
         headers=headers
     )
+
 @router.get('/file_metadata')
 def file_metadata(db: Session = Depends(get_db) , current_user = Depends(get_current_user),file_id: int = None):
     user_id = current_user["user_id"]
@@ -240,6 +247,8 @@ def rename_file(db: Session = Depends(get_db) , current_user = Depends(get_curre
         db.commit()
     except Exception:
         pass
+
+ 
 
     return {"file_id": file_id}
 
@@ -349,7 +358,199 @@ def replace_file(
     except Exception:
         pass
 
+ 
+
     return {
         "message": "File replaced successfully",
         "file": dict(updated_file._mapping)
+    }
+
+@router.get('/storage/summary')
+def storage_summary(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user["user_id"]
+
+    # Total used & limit
+    row = db.execute(text('SELECT storage FROM users WHERE user_id = :uid'), {"uid": user_id}).fetchone()
+    total_used = int(row[0]) if row and row[0] is not None else 0
+    limit_bytes = STORAGE_LIMIT_BYTES
+    percent_used = round((total_used / limit_bytes) * 100, 2) if limit_bytes > 0 else 0.0
+
+    # Fetch files for this user (not deleted)
+    file_rows = db.execute(text(
+        """
+        SELECT file_name, file_size, created_at, parent_id
+        FROM files
+        WHERE user_id = :uid AND status != 'deleted'
+        """
+    ), {"uid": user_id}).fetchall()
+
+    # By type (extension)
+    type_map = {}
+    for r in file_rows:
+        name = r[0] or ""
+        size = int(r[1] or 0)
+        ext = "no_ext"
+        if "." in name:
+            try:
+                ext = name.rsplit('.', 1)[-1].lower() or "no_ext"
+            except Exception:
+                ext = "no_ext"
+        bucket = type_map.setdefault(ext, {"extension": ext, "bytes": 0, "count": 0})
+        bucket["bytes"] += size
+        bucket["count"] += 1
+    by_type = sorted(type_map.values(), key=lambda x: x["bytes"], reverse=True)
+
+    # By month (YYYY-MM)
+    month_rows = db.execute(text(
+        """
+        SELECT strftime('%Y-%m', created_at) AS ym, COALESCE(SUM(file_size),0) AS bytes, COUNT(*) AS cnt
+        FROM files
+        WHERE user_id = :uid AND status != 'deleted'
+        GROUP BY ym
+        ORDER BY ym
+        """
+    ), {"uid": user_id}).fetchall()
+    by_month = [
+        {"month": (mr[0] or "unknown"), "bytes": int(mr[1] or 0), "count": int(mr[2] or 0)}
+        for mr in month_rows
+    ]
+
+    # Top-level folder breakdown (children of root) + root files
+    top_folders = db.execute(text(
+        """
+        SELECT folder_id, folder_name
+        FROM folders
+        WHERE user_id = :uid AND parent_id = 0
+        """
+    ), {"uid": user_id}).fetchall()
+
+    def sum_folder_bytes(root_folder_id: int) -> int:
+        # Sum sizes of all files under the subtree of root_folder_id
+        q = text(
+            """
+            WITH RECURSIVE descendants(id) AS (
+                SELECT :root
+                UNION ALL
+                SELECT f.folder_id FROM folders f JOIN descendants d ON f.parent_id = d.id
+            )
+            SELECT COALESCE(SUM(file_size),0) FROM files
+            WHERE user_id = :uid AND status != 'deleted' AND parent_id IN (SELECT id FROM descendants)
+            """
+        )
+        r = db.execute(q, {"root": root_folder_id, "uid": user_id}).fetchone()
+        return int(r[0] or 0)
+
+    by_folder = []
+    for f in top_folders:
+        fid, fname = f[0], f[1]
+        by_folder.append({
+            "folder_id": int(fid),
+            "folder_name": fname,
+            "bytes": sum_folder_bytes(int(fid))
+        })
+
+    # Files directly in root (parent_id = 0)
+    root_bytes_row = db.execute(text(
+        """
+        SELECT COALESCE(SUM(file_size),0) FROM files
+        WHERE user_id = :uid AND status != 'deleted' AND parent_id = 0
+        """
+    ), {"uid": user_id}).fetchone()
+    root_files_bytes = int(root_bytes_row[0] or 0)
+    if root_files_bytes > 0:
+        by_folder.append({
+            "folder_id": 0,
+            "folder_name": "Root (files only)",
+            "bytes": root_files_bytes
+        })
+
+    by_folder.sort(key=lambda x: x["bytes"], reverse=True)
+
+    return {
+        "total_used_bytes": total_used,
+        "limit_bytes": limit_bytes,
+        "percent_used": percent_used,
+        "by_type": by_type,
+        "by_month": by_month,
+        "by_folder": by_folder,
+    }
+@router.get('/storage/folder_breakdown')
+def folder_breakdown(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+    folder_id: int = Query(0, description="Folder to break down; 0 means root")
+):
+    user_id = current_user["user_id"]
+
+    # Validate folder ownership (optional). Queries below already restrict by user_id.
+    if folder_id != 0:
+        owner = db.execute(text(
+            "SELECT user_id, folder_name FROM folders WHERE folder_id = :fid"
+        ), {"fid": folder_id}).fetchone()
+        if not owner or str(owner[0]) != str(user_id):
+            raise HTTPException(status_code=403, detail="You don't have permission to access this folder")
+        parent_name = owner[1]
+    else:
+        parent_name = "Root"
+
+    # Immediate subfolders
+    subfolders = db.execute(text(
+        """
+        SELECT folder_id, folder_name
+        FROM folders
+        WHERE user_id = :uid AND parent_id = :pid
+        """
+    ), {"uid": user_id, "pid": folder_id}).fetchall()
+
+    def sum_folder_bytes(root_folder_id: int) -> int:
+        q = text(
+            """
+            WITH RECURSIVE descendants(id) AS (
+                SELECT :root
+                UNION ALL
+                SELECT f.folder_id FROM folders f JOIN descendants d ON f.parent_id = d.id
+            )
+            SELECT COALESCE(SUM(file_size),0) FROM files
+            WHERE user_id = :uid AND status != 'deleted' AND parent_id IN (SELECT id FROM descendants)
+            """
+        )
+        r = db.execute(q, {"root": root_folder_id, "uid": user_id}).fetchone()
+        return int(r[0] or 0)
+
+    by_child = []
+    for f in subfolders:
+        fid, fname = f[0], f[1]
+        by_child.append({
+            "folder_id": int(fid),
+            "folder_name": fname,
+            "bytes": sum_folder_bytes(int(fid))
+        })
+
+    # Files directly inside this folder
+    direct_row = db.execute(text(
+        """
+        SELECT COALESCE(SUM(file_size),0), COUNT(*)
+        FROM files
+        WHERE user_id = :uid AND status != 'deleted' AND parent_id = :pid
+        """
+    ), {"uid": user_id, "pid": folder_id}).fetchone()
+    direct_bytes = int(direct_row[0] or 0)
+    direct_count = int(direct_row[1] or 0)
+    if direct_bytes > 0:
+        by_child.append({
+            "folder_id": folder_id,
+            "folder_name": f"{parent_name} (files only)",
+            "bytes": direct_bytes,
+            "count": direct_count
+        })
+
+    by_child.sort(key=lambda x: x["bytes"], reverse=True)
+
+    return {
+        "folder_id": folder_id,
+        "folder_name": parent_name,
+        "children": by_child
     }

@@ -124,6 +124,27 @@ queries = [
     """
     CREATE INDEX IF NOT EXISTS idx_share_access_user_id ON share_access(user_id)
     """,
+
+    """
+    CREATE TABLE IF NOT EXISTS starred (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        file_id INTEGER,
+        folder_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_starred_user_file ON starred(user_id, file_id)
+    """,
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_starred_user_folder ON starred(user_id, folder_id)
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS idx_starred_user_id ON starred(user_id)
+    """,
+
+    
 ]
 
 def create_tables():

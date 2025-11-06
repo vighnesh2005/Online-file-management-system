@@ -10,6 +10,7 @@ import {
   Star, 
   Trash2, 
   FileText,
+  PieChart,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -43,6 +44,12 @@ export default function Sidebar() {
       href: '/folder/0',
       active: pathname?.startsWith('/folder')
     },
+    {
+      icon: Star,
+      label: 'Starred',
+      href: '/starred',
+      active: pathname === '/starred'
+    },
     { 
       icon: Users, 
       label: 'Shared with me', 
@@ -54,6 +61,12 @@ export default function Sidebar() {
       label: 'Recycle Bin', 
       href: '/recyclebin',
       active: pathname === '/recyclebin'
+    },
+    { 
+      icon: PieChart, 
+      label: 'Storage Insights', 
+      href: '/storage',
+      active: pathname === '/storage'
     },
     { 
       icon: FileText, 
